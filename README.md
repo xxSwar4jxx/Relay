@@ -4,7 +4,7 @@
 Everything is configured **inside Discord** — slash commands, buttons, select menus, and modals. No external dashboard required.
 
 **Version:** 1.1.0  
-**Author:** [ZeroTech](https://swar4j.space) · [xxSwar4jxx](https://github.com/xxSwar4jxx)
+**Author:** [OpenForge](https://swar4j.space) · [xxSwar4jxx](https://github.com/xxSwar4jxx)
 
 [![Add to Discord](https://img.shields.io/badge/Add%20to%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1539725899253940396&permissions=5629878028397568&integration_type=0&scope=applications.commands+bot)
 
