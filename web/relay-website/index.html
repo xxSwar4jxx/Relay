@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Relay</title>
+  <meta name="description" content="Relay — a clean, customizable Discord ticket system built by OpenForge." />
+  <meta name="theme-color" content="#05060a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #05060a;
+      --bg-elevated: #0b0c11;
+      --surface: #101218;
+      --surface-2: #151820;
+      --fg: #f3f5f8;
+      --muted: #8b93a7;
+      --subtle: #5c6478;
+      --border: #1c2030;
+      --border-strong: #2a3144;
+      --cyan: #67e8f9;
+      --primary: #8b91ff;
+      --primary-fg: #0b0c16;
+      --primary-hover: #9ea3ff;
+      --ok: #4ade80;
+      --discord: #5865f2;
+      --danger: #f87171;
+      --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+      --font-display: "Sora", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { color-scheme: dark; scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-sans);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+    button, [role="button"] { cursor: pointer; font: inherit; }
+
+    .wrap { max-width: 72rem; margin: 0 auto; padding: 0 1rem; }
+    @media (min-width: 640px) { .wrap { padding: 0 1.5rem; } }
+
+    .font-display { font-family: var(--font-display); }
+    .font-mono { font-family: var(--font-mono); }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--cyan);
+    }
+    .eyebrow::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--cyan);
+      box-shadow: 0 0 10px color-mix(in oklab, var(--cyan) 70%, transparent);
+    }
+
+    /* Header */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in oklab, var(--bg) 85%, transparent);
+      backdrop-filter: blur(12px);
+    }
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 4rem;
+      max-width: 72rem;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+    @media (min-width: 640px) { .header-inner { padding: 0 1.5rem; } }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      width: 9rem;
+    }
+    .brand img {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 999px;
+      object-fit: cover;
+      box-shadow: 0 0 0 1px var(--border-strong);
+    }
+    .brand span {
+      font-family: var(--font-display);
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    nav.desktop {
+      display: none;
+      gap: 2rem;
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+    nav.desktop a:hover { color: var(--fg); }
+    .header-cta {
+      display: none;
+      width: 9rem;
+      justify-content: flex-end;
+    }
+    @media (min-width: 1024px) {
+      nav.desktop { display: flex; }
+      .header-cta { display: flex; }
+      .menu-btn { display: none !important; }
+    }
+    .menu-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 0.75rem;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--fg);
+    }
+    .mobile-nav {
+      display: none;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+      padding: 1rem;
+    }
+    .mobile-nav.open { display: block; }
+    .mobile-nav a {
+      display: block;
+      padding: 0.75rem 0.75rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+    .mobile-nav a:hover { background: var(--surface); color: var(--fg); }
+    .mobile-nav .btn { margin-top: 0.5rem; width: 100%; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      height: 2.75rem;
+      padding: 0 1.25rem;
+      border-radius: 0.75rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border: none;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .btn-lg { height: 3rem; padding: 0 1.5rem; }
+    .btn-sm { height: 2.25rem; padding: 0 0.75rem; font-size: 0.75rem; }
+    .btn-primary {
+      background: var(--primary);
+      color: var(--primary-fg);
+      box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 40%, transparent);
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-outline {
+      background: transparent;
+      color: var(--fg);
+      border: 1px solid var(--border-strong);
+    }
+    .btn-outline:hover { background: var(--surface); }
+
+    /* Hero */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero-glow {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 70% 20%, color-mix(in oklab, var(--cyan) 8%, transparent), transparent 55%);
+    }
+    .hero-grid {
+      position: relative;
+      display: grid;
+      gap: 3rem;
+      align-items: center;
+      padding: 5rem 0;
+    }
+    @media (min-width: 1024px) {
+      .hero-grid {
+        grid-template-columns: 1.1fr 0.9fr;
+        padding: 7rem 0 4rem;
+      }
+    }
+    .hero h1 {
+      margin-top: 1.25rem;
+      font-family: var(--font-display);
+      font-size: clamp(3rem, 8vw, 4.5rem);
+      font-weight: 600;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+    }
+    .hero .tagline {
+      margin-top: 1rem;
+      font-family: var(--font-display);
+      font-size: clamp(1.25rem, 3vw, 1.5rem);
+      color: var(--muted);
+    }
+    .hero .desc {
+      margin-top: 1rem;
+      max-width: 28rem;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+    .hero-actions {
+      margin-top: 2rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .hero-mark {
+      display: flex;
+      justify-content: center;
+    }
+    @media (min-width: 1024px) { .hero-mark { justify-content: flex-end; } }
+    .orbit {
+      position: relative;
+      width: min(22rem, 90vw);
+      height: min(22rem, 90vw);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .orbit::before {
+      content: "";
+      position: absolute;
+      inset: 1.5rem;
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--cyan) 10%, transparent);
+      filter: blur(40px);
+    }
+    .orbit-ring {
+      position: absolute;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+    }
+    .orbit-ring.r1 { inset: 1rem; }
+    .orbit-ring.r2 { inset: 2.5rem; border-color: color-mix(in oklab, var(--border) 80%, transparent); }
+    .orbit-ring.r3 { inset: 4rem; border-color: color-mix(in oklab, var(--cyan) 20%, transparent); }
+    .orbit img {
+      position: relative;
+      width: 14rem;
+      height: 14rem;
+      border-radius: 999px;
+      object-fit: cover;
+      box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--cyan) 18%, transparent),
+        0 0 80px color-mix(in oklab, var(--cyan) 12%, transparent);
+    }
+    @media (min-width: 640px) {
+      .orbit img { width: 15rem; height: 15rem; }
+    }
+
+    /* Stats */
+    .stats { border-bottom: 1px solid var(--border); padding: 2.5rem 0; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+    }
+    @media (min-width: 768px) { .stats-grid { grid-template-columns: repeat(4, 1fr); } }
+    .stat {
+      padding: 2rem 1.5rem;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+    @media (min-width: 768px) {
+      .stat { border-bottom: 0; border-right: 1px solid var(--border); }
+      .stat:last-child { border-right: 0; }
+    }
+    .stat:nth-child(odd) { border-right: 1px solid var(--border); }
+    @media (min-width: 768px) {
+      .stat:nth-child(odd) { border-right: 1px solid var(--border); }
+    }
+    .stat:nth-child(2) { border-right: 0; }
+    @media (min-width: 768px) { .stat:nth-child(2) { border-right: 1px solid var(--border); } }
+    .stat:nth-child(3), .stat:nth-child(4) { border-bottom: 0; }
+    .stat .value {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--cyan);
+    }
+    .stat .label {
+      margin-top: 0.5rem;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--subtle);
+    }
+
+    /* Sections */
+    section.block {
+      border-bottom: 1px solid var(--border);
+      padding: 5rem 0;
+    }
+    section.block h2 {
+      margin-top: 1rem;
+      font-family: var(--font-display);
+      font-size: clamp(1.75rem, 4vw, 2.75rem);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      max-width: 36rem;
+    }
+    section.block .lead {
+      margin-top: 0.75rem;
+      max-width: 32rem;
+      color: var(--muted);
+    }
+
+    /* Features */
+    .features-grid {
+      margin-top: 3rem;
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 640px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 1024px) { .features-grid { grid-template-columns: repeat(4, 1fr); } }
+    .feature-card {
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      padding: 1.25rem;
+      transition: border-color 0.2s;
+    }
+    .feature-card:hover { border-color: color-mix(in oklab, var(--cyan) 25%, var(--border)); }
+    .feature-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 0.75rem;
+      background: var(--surface);
+      color: var(--cyan);
+    }
+    .feature-card h3 {
+      margin-top: 1rem;
+      font-family: var(--font-display);
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    .feature-card p {
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* Steps */
+    .steps {
+      margin-top: 3rem;
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 768px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+    .step {
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      padding: 1.25rem;
+    }
+    .step .n {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--cyan);
+    }
+    .step h3 {
+      margin-top: 0.5rem;
+      font-family: var(--font-display);
+      font-weight: 600;
+    }
+    .step p {
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+
+    /* Discord mock */
+    .discord-win {
+      margin-top: 2.5rem;
+      max-width: 36rem;
+      margin-left: auto;
+      margin-right: auto;
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 1rem 1.25rem;
+    }
+    .win-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-bottom: 0.75rem;
+    }
+    .win-bar .dot { width: 0.625rem; height: 0.625rem; border-radius: 999px; }
+    .dot-r { background: #ff5f56; }
+    .dot-y { background: #ffbd2e; }
+    .dot-g { background: #27c93f; }
+    .win-bar .chan {
+      margin-left: 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--subtle);
+    }
+    .bot-row { display: flex; gap: 0.75rem; }
+    .bot-row > img {
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 999px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .bot-name {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    .bot-badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      background: var(--primary);
+      color: var(--primary-fg);
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.25rem;
+    }
+    .embed {
+      position: relative;
+      margin-top: 0.5rem;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      border-radius: 0.5rem;
+      padding: 0.85rem 0.85rem 0.85rem 1rem;
+      overflow: hidden;
+    }
+    .embed::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--embed-accent, var(--discord));
+    }
+    .embed.open { --embed-accent: var(--discord); }
+    .embed.claimed { --embed-accent: var(--ok); }
+    .embed .title { font-family: var(--font-display); font-size: 0.9rem; font-weight: 600; }
+    .embed .body { margin-top: 0.4rem; font-size: 0.875rem; color: var(--muted); }
+    .embed .field-label {
+      margin-top: 0.75rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--subtle);
+    }
+    .embed .field-value { margin-top: 0.25rem; font-size: 0.875rem; }
+    .embed .field-value.ok { color: var(--ok); }
+    .embed .field-value.muted { color: var(--muted); }
+    .embed .footer {
+      margin-top: 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--subtle);
+    }
+    .d-btns {
+      margin-top: 0.75rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .d-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.35rem 0.75rem;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      border: none;
+    }
+    .d-btn-primary { background: var(--discord); color: #fff; }
+    .d-btn-secondary {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border-strong);
+    }
+    .d-btn-danger {
+      background: color-mix(in oklab, var(--danger) 15%, transparent);
+      color: #fca5a5;
+    }
+
+    /* Claim */
+    .claim-grid {
+      margin-top: 2.5rem;
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 768px) { .claim-grid { grid-template-columns: 1fr 1fr; } }
+    .claim-col .label {
+      margin-bottom: 0.75rem;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--subtle);
+    }
+    .claim-col.claimed .label { color: var(--cyan); }
+
+    /* Panel */
+    .panel-wrap { margin-top: 2.5rem; max-width: 32rem; margin-left: auto; margin-right: auto; }
+    .panel-btns {
+      margin-top: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    @media (min-width: 640px) { .panel-btns { flex-direction: row; } }
+    .panel-btns .d-btn {
+      flex: 1;
+      justify-content: center;
+      padding: 0.65rem 1rem;
+      font-size: 0.875rem;
+    }
+    .of-footer {
+      margin-top: 1rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--subtle);
+    }
+    .of-footer img { width: 1rem; height: 1rem; border-radius: 0.2rem; }
+
+    /* Commands */
+    .cmd-layout {
+      margin-top: 3rem;
+      display: grid;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    @media (min-width: 1024px) {
+      .cmd-layout { grid-template-columns: 1.05fr 0.95fr; }
+    }
+    .terminal {
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 1.25rem;
+    }
+    .terminal .lines { margin-top: 0.25rem; font-family: var(--font-mono); font-size: 0.875rem; line-height: 1.75; }
+    .terminal .cmd { color: var(--fg); }
+    .terminal .ok { color: var(--ok); }
+    .cmd-grid {
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 640px) { .cmd-grid { grid-template-columns: 1fr 1fr; } }
+    .cmd-card {
+      border-radius: 0.75rem;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      padding: 0.75rem 1rem;
+    }
+    .cmd-card code {
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      color: var(--cyan);
+    }
+    .cmd-card p {
+      margin-top: 0.25rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    /* CTA */
+    .cta {
+      border-bottom: 1px solid var(--border);
+      padding: 6rem 0;
+      text-align: center;
+    }
+    .cta h2 {
+      font-family: var(--font-display);
+      font-size: clamp(2.25rem, 6vw, 3.75rem);
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+    .cta .built {
+      margin-top: 1.25rem;
+      font-size: 1.125rem;
+      color: var(--muted);
+    }
+    .cta .built a { color: var(--cyan); }
+    .cta .built a:hover { text-decoration: underline; }
+    .cta-actions {
+      margin-top: 2rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 0;
+    }
+    .footer-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    @media (min-width: 640px) {
+      .footer-inner {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+    }
+    .footer-links {
+      font-size: 0.875rem;
+      color: var(--subtle);
+    }
+    .footer-links a { color: var(--muted); }
+    .footer-links a:hover { color: var(--cyan); }
+    .footer-links .sep { margin: 0 0.5rem; color: var(--border-strong); }
+
+    .discord-icon { width: 1rem; height: 1rem; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <a class="brand" href="#top">
+        <img src="relay-pfp.jpg" alt="" width="32" height="32" />
+        <span>Relay</span>
+      </a>
+      <nav class="desktop" aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="#commands">Commands</a>
+        <a href="#stats">Stats</a>
+      </nav>
+      <div class="header-cta">
+        <a class="btn btn-sm btn-primary" href="https://discord.com/oauth2/authorize?scope=bot%20applications.commands" target="_blank" rel="noreferrer">
+          <svg class="discord-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.8 19.8 0 0 0-4.885-1.515.07.07 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.3 18.3 0 0 0-5.487 0 12.6 12.6 0 0 0-.617-1.25.07.07 0 0 0-.079-.037A19.7 19.7 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.08.08 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.08.08 0 0 0 .084-.028 14 14 0 0 0 1.226-1.994.07.07 0 0 0-.041-.1 13.1 13.1 0 0 1-1.872-.892.07.07 0 0 1-.007-.117c.126-.094.252-.192.372-.292a.07.07 0 0 1 .074-.01c3.928 1.793 8.18 1.793 12.062 0a.07.07 0 0 1 .075.009c.12.1.246.198.373.293a.07.07 0 0 1-.006.117 12.3 12.3 0 0 1-1.873.891.07.07 0 0 0-.041.101c.36.698.772 1.363 1.225 1.993a.08.08 0 0 0 .084.028 19.8 19.8 0 0 0 6.002-3.03.08.08 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.06.06 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+          Add Bot
+        </a>
+      </div>
+      <button class="menu-btn" type="button" aria-label="Open menu" id="menuBtn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+    </div>
+    <div class="mobile-nav" id="mobileNav">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#commands">Commands</a>
+      <a href="#stats">Stats</a>
+      <a class="btn btn-primary" href="https://discord.com/oauth2/authorize?scope=bot%20applications.commands" target="_blank" rel="noreferrer">Add Bot</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="wrap hero-grid">
+        <div>
+          <p class="eyebrow">Discord tickets &amp; support</p>
+          <h1>Relay</h1>
+          <p class="tagline">Support, routed better.</p>
+          <p class="desc">A clean, customizable Discord ticket system built by OpenForge.</p>
+          <div class="hero-actions">
+            <a class="btn btn-lg btn-primary" href="https://discord.com/oauth2/authorize?scope=bot%20applications.commands" target="_blank" rel="noreferrer">
+              <svg class="discord-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.8 19.8 0 0 0-4.885-1.515.07.07 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.3 18.3 0 0 0-5.487 0 12.6 12.6 0 0 0-.617-1.25.07.07 0 0 0-.079-.037A19.7 19.7 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.08.08 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.08.08 0 0 0 .084-.028 14 14 0 0 0 1.226-1.994.07.07 0 0 0-.041-.1 13.1 13.1 0 0 1-1.872-.892.07.07 0 0 1-.007-.117c.126-.094.252-.192.372-.292a.07.07 0 0 1 .074-.01c3.928 1.793 8.18 1.793 12.062 0a.07.07 0 0 1 .075.009c.12.1.246.198.373.293a.07.07 0 0 1-.006.117 12.3 12.3 0 0 1-1.873.891.07.07 0 0 0-.041.101c.36.698.772 1.363 1.225 1.993a.08.08 0 0 0 .084.028 19.8 19.8 0 0 0 6.002-3.03.08.08 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.06.06 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+              Add Bot
+            </a>
+            <a class="btn btn-lg btn-outline" href="#features">View Features</a>
+          </div>
+        </div>
+        <div class="hero-mark">
+          <div class="orbit">
+            <div class="orbit-ring r1"></div>
+            <div class="orbit-ring r2"></div>
+            <div class="orbit-ring r3"></div>
+            <img src="relay-pfp.jpg" alt="Relay bot avatar" width="240" height="240" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="stats" id="stats">
+      <div class="wrap">
+        <div class="stats-grid">
+          <div class="stat">
+            <p class="value">Tickets</p>
+            <p class="label">System</p>
+          </div>
+          <div class="stat">
+            <p class="value">SQLite</p>
+            <p class="label">Database</p>
+          </div>
+          <div class="stat">
+            <p class="value">Discord</p>
+            <p class="label">Bot</p>
+          </div>
+          <div class="stat">
+            <p class="value">OpenForge</p>
+            <p class="label">Developed by</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="block" id="features">
+      <div class="wrap">
+        <p class="eyebrow">Features</p>
+        <h2>Everything you need to run a ticket desk.</h2>
+        <p class="lead">Configured entirely in Discord — slash commands, buttons, selects, and modals. No external dashboard.</p>
+        <div class="features-grid">
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            </div>
+            <h3>Ticket panels</h3>
+            <p>Deploy a public panel with custom title, description, color, and images. Preview before sending; update in place.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M15 5v2M15 11v2M15 17v2M5 5h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/></svg>
+            </div>
+            <h3>Custom ticket types</h3>
+            <p>Unlimited types per server. Each has its own style, staff roles, limits, and cooldown. Over 25 types switch to select menus.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+            </div>
+            <h3>Ticket categories</h3>
+            <p>New tickets open inside the Discord category you configure. Missing category fails with a clear error — no silent top-level dumps.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <h3>Ticket claiming</h3>
+            <p>Staff claim a ticket so ownership is visible. First successful claim wins. Only the claimant can unclaim; admins can override.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <h3>Permissions</h3>
+            <p>Global staff, per-type staff, and ticket admin roles. Application-level checks on every privileged action — custom IDs are never trusted alone.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+            </div>
+            <h3>Logging &amp; transcripts</h3>
+            <p>Optional log channel for create, claim, close, and config events. Transcripts paginate history with a 10,000-message safety cap.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <h3>Lifecycle controls</h3>
+            <p>Add or remove users, close, reopen, transcript, and delete. The ticket creator cannot be removed from their own ticket.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>
+            </div>
+            <h3>SQLite persistence</h3>
+            <p>Guild-isolated data with parameterized queries, foreign keys, and a migration runner. Existing installs survive updates.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="block" id="how-it-works">
+      <div class="wrap">
+        <p class="eyebrow">How it works</p>
+        <h2>Open. Claim. Resolve.</h2>
+        <p class="lead">A three-step loop staff already know — with ownership written on the ticket itself.</p>
+        <div class="steps">
+          <div class="step">
+            <p class="n">01</p>
+            <h3>Open a ticket</h3>
+            <p>A member presses a panel button. Relay creates a private channel under your configured category.</p>
+          </div>
+          <div class="step">
+            <p class="n">02</p>
+            <h3>Staff claims it</h3>
+            <p>Authorized staff hit Claim Ticket. The embed updates to show who owns the conversation.</p>
+          </div>
+          <div class="step">
+            <p class="n">03</p>
+            <h3>Support resolves it</h3>
+            <p>Close when done. Optionally generate a transcript, then delete the channel.</p>
+          </div>
+        </div>
+
+        <div class="discord-win">
+          <div class="win-bar">
+            <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+            <span class="chan">ticket-general-support</span>
+          </div>
+          <div class="bot-row">
+            <img src="relay-pfp.jpg" alt="" width="40" height="40" />
+            <div>
+              <div class="bot-name">Relay <span class="bot-badge">Bot</span></div>
+              <div class="embed claimed">
+                <p class="title">General Support</p>
+                <p class="body">Thanks for reaching out. Support will be with you shortly.</p>
+                <p class="field-label">Claim Status</p>
+                <p class="field-value ok">Claimed by @Moderator</p>
+                <p class="footer">Ticket #142</p>
+              </div>
+              <div class="d-btns">
+                <span class="d-btn d-btn-secondary">Unclaim Ticket</span>
+                <span class="d-btn d-btn-secondary">Add User</span>
+                <span class="d-btn d-btn-secondary">Remove User</span>
+                <span class="d-btn d-btn-danger">Close</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Claim -->
+    <section class="block" id="claim">
+      <div class="wrap">
+        <p class="eyebrow">Claim system</p>
+        <h2>One ticket. One owner.</h2>
+        <p class="lead">Staff can claim a ticket so members and other staff see who is handling it. The first successful claim is stored in the database; another staff member cannot overwrite it.</p>
+        <div class="claim-grid">
+          <div class="claim-col">
+            <p class="label">Unclaimed</p>
+            <div class="discord-win" style="margin:0;max-width:none">
+              <div class="bot-row">
+                <img src="relay-pfp.jpg" alt="" width="40" height="40" />
+                <div>
+                  <div class="bot-name">Relay <span class="bot-badge">Bot</span></div>
+                  <div class="embed open">
+                    <p class="title">General Support</p>
+                    <p class="body">Waiting for staff.</p>
+                    <p class="field-label">Claim Status</p>
+                    <p class="field-value muted">Unclaimed</p>
+                  </div>
+                  <div class="d-btns">
+                    <span class="d-btn d-btn-primary">Claim Ticket</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="claim-col claimed">
+            <p class="label">Claimed</p>
+            <div class="discord-win" style="margin:0;max-width:none">
+              <div class="bot-row">
+                <img src="relay-pfp.jpg" alt="" width="40" height="40" />
+                <div>
+                  <div class="bot-name">Relay <span class="bot-badge">Bot</span></div>
+                  <div class="embed claimed">
+                    <p class="title">General Support</p>
+                    <p class="body">Claimed by @Moderator</p>
+                    <p class="field-label">Claim Status</p>
+                    <p class="field-value ok">Claimed by @Moderator</p>
+                  </div>
+                  <div class="d-btns">
+                    <span class="d-btn d-btn-secondary">Unclaim Ticket</span>
+                  </div>
+                  <p style="margin-top:0.75rem;font-size:0.8rem;color:var(--muted)">Only the current claimant can unclaim. Guild administrators can force-unclaim; that override is written to the log channel.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel -->
+    <section class="block" id="panel">
+      <div class="wrap">
+        <p class="eyebrow">Public panel</p>
+        <h2>The panel members actually click.</h2>
+        <p class="lead">Title, description, and ticket types are yours. OpenForge attribution stays on this public panel only.</p>
+        <div class="panel-wrap">
+          <div class="discord-win" style="margin:0;max-width:none">
+            <div class="bot-row">
+              <img src="relay-pfp.jpg" alt="" width="40" height="40" />
+              <div style="flex:1">
+                <div class="bot-name">Relay <span class="bot-badge">Bot</span></div>
+                <div class="embed open">
+                  <p class="title">Support Tickets</p>
+                  <p class="body">Click a button below to open a ticket.</p>
+                  <div class="of-footer">
+                    <img src="openforge-logo.png" alt="" />
+                    <span>Developed by OpenForge</span>
+                  </div>
+                </div>
+                <div class="panel-btns">
+                  <span class="d-btn d-btn-primary">Staff Application</span>
+                  <span class="d-btn d-btn-secondary">General Support</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Commands -->
+    <section class="block" id="commands">
+      <div class="wrap">
+        <p class="eyebrow">Commands</p>
+        <h2>Slash commands, ready when you are.</h2>
+        <p class="lead">One command, eight subcommands. Ticket admins can use <span class="font-mono" style="color:var(--cyan)">/ticket</span> even without Manage Guild, as long as they hold a configured admin role.</p>
+        <div class="cmd-layout">
+          <div class="terminal">
+            <div class="win-bar">
+              <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+              <span class="chan">relay — session</span>
+            </div>
+            <div class="lines">
+              <div class="cmd">/ticket setup</div>
+              <div class="ok">✓ Configuration menu opened</div>
+              <div class="cmd">/ticket panel send</div>
+              <div class="ok">✓ Panel deployed to #support</div>
+              <div class="cmd">/ticket config</div>
+              <div class="ok">✓ 2 types · logs set · transcripts on</div>
+              <div class="cmd">/ticket staff</div>
+              <div class="ok">✓ Global staff roles updated</div>
+            </div>
+          </div>
+          <div class="cmd-grid">
+            <div class="cmd-card"><code>/ticket setup</code><p>Open the full configuration menu</p></div>
+            <div class="cmd-card"><code>/ticket panel</code><p>Preview or send the public ticket panel</p></div>
+            <div class="cmd-card"><code>/ticket config</code><p>View the current ticket configuration</p></div>
+            <div class="cmd-card"><code>/ticket buttons</code><p>Create, edit, style, and reorder types</p></div>
+            <div class="cmd-card"><code>/ticket staff</code><p>Set global staff roles</p></div>
+            <div class="cmd-card"><code>/ticket logs</code><p>Choose the logging channel</p></div>
+            <div class="cmd-card"><code>/ticket transcripts</code><p>Enable transcripts and pick a channel</p></div>
+            <div class="cmd-card"><code>/ticket reset</code><p>Reset this server’s ticket configuration</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta">
+      <div class="wrap">
+        <h2>Support,<br />routed better.<br />Relay.</h2>
+        <p class="built">Built by <a href="https://openforge.dev" target="_blank" rel="noreferrer">OpenForge</a>.</p>
+        <div class="cta-actions">
+          <a class="btn btn-lg btn-primary" href="https://discord.com/oauth2/authorize?scope=bot%20applications.commands" target="_blank" rel="noreferrer">
+            <svg class="discord-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.8 19.8 0 0 0-4.885-1.515.07.07 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.3 18.3 0 0 0-5.487 0 12.6 12.6 0 0 0-.617-1.25.07.07 0 0 0-.079-.037A19.7 19.7 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.08.08 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.08.08 0 0 0 .084-.028 14 14 0 0 0 1.226-1.994.07.07 0 0 0-.041-.1 13.1 13.1 0 0 1-1.872-.892.07.07 0 0 1-.007-.117c.126-.094.252-.192.372-.292a.07.07 0 0 1 .074-.01c3.928 1.793 8.18 1.793 12.062 0a.07.07 0 0 1 .075.009c.12.1.246.198.373.293a.07.07 0 0 1-.006.117 12.3 12.3 0 0 1-1.873.891.07.07 0 0 0-.041.101c.36.698.772 1.363 1.225 1.993a.08.08 0 0 0 .084.028 19.8 19.8 0 0 0 6.002-3.03.08.08 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.06.06 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+            Add Relay
+          </a>
+          <a class="btn btn-lg btn-outline" href="https://openforge.dev" target="_blank" rel="noreferrer">OpenForge</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap footer-inner">
+      <a class="brand" href="#top">
+        <img src="relay-pfp.jpg" alt="" width="28" height="28" style="width:1.75rem;height:1.75rem" />
+        <span>Relay</span>
+      </a>
+      <p class="footer-links">
+        Developed by <a href="https://openforge.dev" target="_blank" rel="noreferrer">OpenForge</a>
+        <span class="sep">·</span>
+        <a href="#features">Features</a>
+        <span class="sep">·</span>
+        <a href="#stats">Stats</a>
+        <span class="sep">·</span>
+        <a href="https://openforge.dev" target="_blank" rel="noreferrer">OpenForge</a>
+        <span class="sep">·</span>
+        <a href="https://discord.com/oauth2/authorize?scope=bot%20applications.commands" target="_blank" rel="noreferrer">Discord</a>
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    const btn = document.getElementById("menuBtn");
+    const nav = document.getElementById("mobileNav");
+    btn.addEventListener("click", () => {
+      nav.classList.toggle("open");
+    });
+    nav.querySelectorAll("a").forEach((a) => {
+      a.addEventListener("click", () => nav.classList.remove("open"));
+    });
+  </script>
+</body>
+</html>

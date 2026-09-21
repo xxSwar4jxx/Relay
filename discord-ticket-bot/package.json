@@ -1,0 +1,27 @@
+{
+  "name": "relay",
+  "version": "1.1.0",
+  "description": "Relay — production-ready Discord ticket bot by OpenForge",
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json && node -e \"const fs=require('fs');const path=require('path');fs.copyFileSync('src/database/schema.sql','dist/database/schema.sql');const md='src/database/migrations';const od='dist/database/migrations';fs.mkdirSync(od,{recursive:true});for(const f of fs.readdirSync(md))fs.copyFileSync(path.join(md,f),path.join(od,f));\"",
+    "start": "node dist/index.js",
+    "deploy": "tsx src/deploy-commands.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.7.4",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  }
+}
