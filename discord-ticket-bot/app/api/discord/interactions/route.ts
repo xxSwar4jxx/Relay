@@ -40,18 +40,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
   }
 
-  // Discord's endpoint validation handshake.
-  if (interaction.type === 1) {
-    return NextResponse.json({ type: 1 });
-  }
+  // Required by Discord when validating an interactions endpoint.
+  if (interaction.type === 1) return NextResponse.json({ type: 1 });
 
-  // Non-PING interactions are wired into the HTTP dispatcher as the migration
-  // progresses. Never execute unsigned requests or acknowledge an interaction
-  // as successful until its handler has actually run.
+  // This branch is intentionally not production-ready yet: feature handlers
+  // must be ported from Gateway interaction objects to raw HTTP payloads
+  // before normal commands and components can be enabled.
   return NextResponse.json({
     type: 4,
     data: {
-      content: "Relay's HTTP runtime is being migrated. Please try again after the update is complete.",
+      content: "Relay is being upgraded to its HTTP runtime. Please try again after the migration is complete.",
       flags: 64,
     },
   });
