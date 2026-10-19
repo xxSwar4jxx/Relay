@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import nacl from "tweetnacl";
+import { handleHttpInteraction } from "../../../../src/runtime/http-handlers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,12 +8,9 @@ export const dynamic = "force-dynamic";
 function verifyDiscordRequest(rawBody: string, signatureHex: string | null, timestamp: string | null): boolean {
   const publicKeyHex = process.env.DISCORD_PUBLIC_KEY;
   if (!publicKeyHex || !signatureHex || !timestamp) return false;
-
   try {
-    // Reject stale signed requests to reduce replay risk.
     const timestampSeconds = Number(timestamp);
     if (!Number.isFinite(timestampSeconds) || Math.abs(Date.now() / 1000 - timestampSeconds) > 5 * 60) return false;
-
     const publicKey = Buffer.from(publicKeyHex, "hex");
     const signature = Buffer.from(signatureHex, "hex");
     if (publicKey.length !== 32 || signature.length !== 64) return false;
@@ -32,33 +30,26 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
-
-  if (!verifyDiscordRequest(
-    rawBody,
-    request.headers.get("x-signature-ed25519"),
-    request.headers.get("x-signature-timestamp"),
-  )) {
+  if (!verifyDiscordRequest(rawBody, request.headers.get("x-signature-ed25519"), request.headers.get("x-signature-timestamp"))) {
     return NextResponse.json({ error: "Invalid Discord request signature." }, { status: 401 });
   }
 
-  let interaction: { type?: number };
+  let interaction: Parameters<typeof handleHttpInteraction>[0];
   try {
-    interaction = JSON.parse(rawBody) as { type?: number };
+    interaction = JSON.parse(rawBody) as Parameters<typeof handleHttpInteraction>[0];
   } catch {
     return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
   }
 
-  // Required by Discord when validating an interactions endpoint.
-  if (interaction.type === 1) return NextResponse.json({ type: 1 });
-
-  // This branch is intentionally not production-ready yet: feature handlers
-  // must be ported from Gateway interaction objects to raw HTTP payloads
-  // before normal commands and components can be enabled.
-  return NextResponse.json({
-    type: 4,
-    data: {
-      content: "Relay is being upgraded to its HTTP runtime. Please try again after the migration is complete.",
-      flags: 64,
-    },
-  });
+  try {
+    const payload = await handleHttpInteraction(interaction);
+    return NextResponse.json(payload);
+  } catch (error) {
+    console.error("[relay-http-interaction] Failed:", error);
+    // Do not expose tokens, configuration, or provider internals in interaction responses.
+    return NextResponse.json({
+      type: 4,
+      data: { content: "Relay couldn't complete that action. Check the bot's server configuration and try again.", flags: 64 },
+    });
+  }
 }
