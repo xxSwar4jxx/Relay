@@ -9,6 +9,10 @@ function verifyDiscordRequest(rawBody: string, signatureHex: string | null, time
   if (!publicKeyHex || !signatureHex || !timestamp) return false;
 
   try {
+    // Reject stale signed requests to reduce replay risk.
+    const timestampSeconds = Number(timestamp);
+    if (!Number.isFinite(timestampSeconds) || Math.abs(Date.now() / 1000 - timestampSeconds) > 5 * 60) return false;
+
     const publicKey = Buffer.from(publicKeyHex, "hex");
     const signature = Buffer.from(signatureHex, "hex");
     if (publicKey.length !== 32 || signature.length !== 64) return false;
@@ -20,6 +24,10 @@ function verifyDiscordRequest(rawBody: string, signatureHex: string | null, time
   } catch {
     return false;
   }
+}
+
+export async function GET() {
+  return NextResponse.json({ ok: true, service: "relay-interactions", runtime: "http" });
 }
 
 export async function POST(request: NextRequest) {
