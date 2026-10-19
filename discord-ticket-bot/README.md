@@ -11,11 +11,11 @@ Relay is a Discord ticket bot being migrated from a long-running Discord Gateway
 - **Request security:** verify Discord's Ed25519 signature against the exact raw request body; reject invalid and stale signatures.
 - **Discord API:** outgoing operations use the Discord REST API, not a Gateway connection.
 - **Configuration storage:** private Vercel Blob JSON objects (no SQL database).
-- **Web page:** a small service landing page at `/`.
+- **Web page:** the Relay landing page at `/` (served from `/relay-index.html`) on the same origin as the HTTP interactions route.
 
 ## Current status
 
-- [x] Next.js application shell and interaction route.
+- [x] Next.js application shell, Relay landing page, and interaction route on the same deployment.
 - [x] Discord PING handshake for endpoint validation.
 - [x] Ed25519 request-signature verification.
 - [x] Minimal Discord REST helper.
@@ -62,7 +62,7 @@ npm run typecheck
 npm run build
 ```
 
-The HTTP route is `/api/discord/interactions`. A GET request is a basic health check; Discord interaction delivery uses POST.
+The landing page is served from `/` (redirecting to `/relay-index.html`). The HTTP route is on the same origin at `/api/discord/interactions`; a GET request is a basic health check and Discord interaction delivery uses POST. The route currently validates signed requests and answers Discord PING, but normal ticket interactions are still pending migration.
 
 ## Discord setup (after the migration is complete)
 
