@@ -22,7 +22,7 @@ async function streamToBuffer(stream: ReadableStream<Uint8Array>): Promise<Buffe
 }
 
 async function findBlob(pathname: string) {
-  const result = await list({ prefix: pathname, limit: 100, access: "private" });
+  const result = await list({ prefix: pathname, limit: 100 });
   return result.blobs.find((blob) => blob.pathname === pathname) ?? null;
 }
 
