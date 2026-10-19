@@ -1,4 +1,4 @@
-import { del, get, put } from "@vercel/blob";
+import { del, get, list, put } from "@vercel/blob";
 
 function assertBlobConfigured(): void {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -21,14 +21,23 @@ async function streamToBuffer(stream: ReadableStream<Uint8Array>): Promise<Buffe
   return Buffer.concat(chunks);
 }
 
+async function findBlob(pathname: string) {
+  const result = await list({ prefix: pathname, limit: 100, access: "private" });
+  return result.blobs.find((blob) => blob.pathname === pathname) ?? null;
+}
+
 export async function readJson<T>(pathname: string, fallback: T): Promise<T> {
   assertBlobConfigured();
-  const result = await get(pathname, { access: "private", useCache: false });
-  if (!result || result.statusCode !== 200 || !result.stream) return fallback;
+  const blob = await findBlob(pathname);
+  if (!blob) return fallback;
+  const result = await get(blob.url, { access: "private", useCache: false });
+  if (!result || result.statusCode !== 200 || !result.stream) {
+    throw new Error(`Unable to read Relay storage object "${pathname}".`);
+  }
   try {
     return JSON.parse((await streamToBuffer(result.stream)).toString("utf8")) as T;
   } catch {
-    return fallback;
+    throw new Error(`Relay storage object "${pathname}" contains invalid JSON.`);
   }
 }
 
@@ -44,5 +53,6 @@ export async function writeJson(pathname: string, value: unknown): Promise<void>
 
 export async function deleteJson(pathname: string): Promise<void> {
   assertBlobConfigured();
-  await del(pathname);
+  const blob = await findBlob(pathname);
+  if (blob) await del(blob.url);
 }
