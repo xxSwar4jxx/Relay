@@ -305,7 +305,8 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         return updateResponse(`Panel published in <#${cfg.panelChannelId}>.`);
       }
     }
-    if (customId === "ticket:open" || customId.startsWith("ticket:open:")) return await openTicket(i, cfg, customId.split(":")[2] || "general");\n    if (customId.startsWith("ticket:select:") && data.values?.[0]) return await openTicket(i, cfg, data.values[0]);
+    if (customId === "ticket:open" || customId.startsWith("ticket:open:")) return await openTicket(i, cfg, customId.split(":")[2] || "general");
+    if (customId.startsWith("ticket:select:") && data.values?.[0]) return await openTicket(i, cfg, data.values[0]);
     if (customId.startsWith("buttons:staff:")) {
       if (!isAdmin(i, cfg)) return response("Only ticket administrators can configure ticket-type staff roles.");
       const id = customId.split(":")[2];
@@ -315,7 +316,17 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       await writeJson(configPath(guildId), cfg);
       return updateResponse(`Staff roles saved for ${target.label} (${target.staffRoleIds.length} role(s)).`);
     }
-    if (customId === "buttons:add-custom") {\n      if (!isAdmin(i, cfg)) return response("Only ticket administrators can add panel buttons.");\n      return { type: 9, data: { custom_id: "buttons:add-submit", title: "Add Ticket Type", components: [\n        { type: 1, components: [{ type: 4, custom_id: "label", label: "Button label", style: 1, required: true, max_length: 80 }] },\n        { type: 1, components: [{ type: 4, custom_id: "emoji", label: "Emoji (optional)", style: 1, required: false, max_length: 20 }] },\n        { type: 1, components: [{ type: 4, custom_id: "channel_name", label: "Channel name ({username})", style: 1, required: false, max_length: 90, value: "ticket-{username}" }] },\n        { type: 1, components: [{ type: 4, custom_id: "opening_message", label: "Opening message", style: 2, required: false, max_length: 1500, value: "Thanks for reaching out! Support will be with you shortly." }] },\n        { type: 1, components: [{ type: 4, custom_id: "style", label: "Style 1=blue, 2=grey, 3=green, 4=red", style: 1, required: true, max_length: 1, value: "1" }] },\n      ] } };\n    }\n    if (customId === "buttons:add-custom") {
+    if (customId === "buttons:add-custom") {
+      if (!isAdmin(i, cfg)) return response("Only ticket administrators can add panel buttons.");
+      return { type: 9, data: { custom_id: "buttons:add-submit", title: "Add Ticket Type", components: [
+        { type: 1, components: [{ type: 4, custom_id: "label", label: "Button label", style: 1, required: true, max_length: 80 }] },
+        { type: 1, components: [{ type: 4, custom_id: "emoji", label: "Emoji (optional)", style: 1, required: false, max_length: 20 }] },
+        { type: 1, components: [{ type: 4, custom_id: "channel_name", label: "Channel name ({username})", style: 1, required: false, max_length: 90, value: "ticket-{username}" }] },
+        { type: 1, components: [{ type: 4, custom_id: "opening_message", label: "Opening message", style: 2, required: false, max_length: 1500, value: "Thanks for reaching out! Support will be with you shortly." }] },
+        { type: 1, components: [{ type: 4, custom_id: "style", label: "Style 1=blue, 2=grey, 3=green, 4=red", style: 1, required: true, max_length: 1, value: "1" }] },
+      ] } };
+    }
+    if (customId.startsWith("buttons:edit:")) {
       if (!isAdmin(i, cfg)) return response("Only ticket administrators can add panel buttons.");
       return { type: 9, data: { custom_id: "buttons:add-submit", title: "Add Ticket Type", components: [
         { type: 1, components: [{ type: 4, custom_id: "label", label: "Button label", style: 1, required: true, max_length: 80 }] },
