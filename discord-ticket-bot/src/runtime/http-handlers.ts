@@ -100,7 +100,7 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
       body: JSON.stringify({
         content: `<@${uid}> ${ticketButton.openingMessage || "Thanks for contacting support! Please describe your issue below."}\n\nStaff can claim this ticket or close it when resolved.`,
         embeds: [embed("Ticket Controls", "Use the controls below. Claiming is limited to configured staff.")],
-        components: [row(button(`ticket:claim:${created.id}`, "Claim", 3), button(`ticket:close:${created.id}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${created.id}`, "Add members to this ticket")],
+        components: [row(button(`ticket:claim:${created.id}`, "Claim", 3), button(`ticket:close:${created.id}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${created.id}`, "Add members to this ticket"), userSelect(`ticket:removemember:${created.id}`, "Remove members from this ticket")],
         allowed_mentions: { parse: [], users: [uid] },
       }),
     });
@@ -264,6 +264,18 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       if (!ticket) return response("This ticket is not tracked by Relay.");
       if (ticket.status !== "open" && action !== "reopen") return response("This ticket is closed. Reopen it before using ticket controls.");
       const uid = userId(i);
+      if (action === "removemember") {
+        if (!isStaff(i, cfg)) return response("Only configured support staff can remove ticket members.");
+        const selected = data.values ?? [];
+        if (!selected.length) return response("Select at least one member.");
+        if (selected.includes(ticket.ownerId)) return response("The ticket creator cannot be removed from their own ticket.");
+        const current = await discordRequest<{ permission_overwrites?: Array<{ id: string; type: number; allow?: string; deny?: string }> }>(`/channels/${channelId}`);
+        const overwrites = (current.permission_overwrites ?? []).filter((o) => !(o.type === 1 && selected.includes(o.id)));
+        await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ permission_overwrites: overwrites }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Removed from ticket: ${selected.map((id) => `<@${id}>`).join(", ")}.`, allowed_mentions: { parse: [], users: selected } }) });
+        await log(cfg, "Ticket Members Removed", `${selected.map((id) => `<@${id}>`).join(", ")} removed from <#${channelId}> by <@${uid}>.`);
+        return response(`Removed ${selected.length} member(s) from the ticket.`);
+      }
       if (action === "addmember") {
         if (ticket.ownerId !== uid && !isStaff(i, cfg)) return response("Only the ticket creator or authorized staff can add members.");
         const selected = data.values ?? [];
@@ -291,7 +303,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         const reopenOverwrites = [{ id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, allow: "3072" }, ...[...new Set([...cfg.staffRoleIds, ...cfg.adminRoleIds])].map((id) => ({ id, type: 0, allow: "3072" }))];
         await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: reopenOverwrites }) });
         await writeJson(configPath(guildId), cfg);
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket reopened by <@${uid}>.`, components: [row(button(`ticket:claim:${channelId}`, "Claim", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket")], allowed_mentions: { parse: [], users: [uid] } }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket reopened by <@${uid}>.`, components: [row(button(`ticket:claim:${channelId}`, "Claim", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"), userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket")], allowed_mentions: { parse: [], users: [uid] } }) });
         await log(cfg, "Ticket Reopened", `Ticket <#${channelId}> reopened by <@${uid}>.`);
         return response("Ticket reopened.");
       }
