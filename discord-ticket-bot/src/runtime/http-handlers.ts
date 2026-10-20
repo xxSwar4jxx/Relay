@@ -8,10 +8,10 @@ type Interaction = {
   data?: { name?: string; options?: Array<{ name: string; value?: string | number; options?: Array<{ name: string; value?: string | number }> }>; custom_id?: string; values?: string[] };
 };
 type TicketRecord = { channelId: string; ownerId: string; claimedBy: string | null; status: "open" | "closed"; createdAt: string };
-type GuildConfig = { guildId: string; categoryId: string | null; panelChannelId: string | null; panelMessageId: string | null; logChannelId: string | null; adminRoleIds: string[]; staffRoleIds: string[]; tickets: TicketRecord[] };
+type GuildConfig = { guildId: string; categoryId: string | null; panelChannelId: string | null; panelMessageId: string | null; logChannelId: string | null; transcriptChannelId: string | null; transcriptsEnabled: boolean; transcriptIncludeAttachments: boolean; adminRoleIds: string[]; staffRoleIds: string[]; tickets: TicketRecord[] };
 
 const configPath = (guildId: string) => `relay/guilds/${guildId}.json`;
-const defaults = (guildId: string): GuildConfig => ({ guildId, categoryId: null, panelChannelId: null, panelMessageId: null, logChannelId: null, adminRoleIds: [], staffRoleIds: [], tickets: [] });
+const defaults = (guildId: string): GuildConfig => ({ guildId, categoryId: null, panelChannelId: null, panelMessageId: null, logChannelId: null, transcriptChannelId: null, transcriptsEnabled: false, transcriptIncludeAttachments: true, adminRoleIds: [], staffRoleIds: [], tickets: [] });
 const userId = (i: Interaction) => i.member?.user?.id ?? i.user?.id ?? "";
 const username = (i: Interaction) => i.member?.user?.username ?? i.user?.username ?? "user";
 const response = (content: string, ephemeral = true, components: unknown[] = []) => ({ type: 4, data: { content, flags: ephemeral ? 64 : 0, components } });
@@ -100,7 +100,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       channelSelect("config:panel_channel_select", "Select panel destination channel", [0]),
       row(button("config:panel_send", "Publish / Update Panel", 1)),
     ]);
-    if (sub === "config") return response(`**Relay Configuration**\n• Ticket category: ${cfg.categoryId ? `<#${cfg.categoryId}>` : "not configured"}\n• Panel channel: ${cfg.panelChannelId ? `<#${cfg.panelChannelId}>` : "not configured"}\n• Logging channel: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : "not configured"}\n• Admin roles: ${cfg.adminRoleIds.length}\n• Staff roles: ${cfg.staffRoleIds.length}\n• Open tickets tracked: ${cfg.tickets.filter((t) => t.status === "open").length}`);
+    if (sub === "config") return response(`**Relay Configuration**\n• Ticket category: ${cfg.categoryId ? `<#${cfg.categoryId}>` : "not configured"}\n• Panel channel: ${cfg.panelChannelId ? `<#${cfg.panelChannelId}>` : "not configured"}\n• Logging channel: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : "not configured"}\n• Transcript channel: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not configured"}\n• Transcripts enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\n• Admin roles: ${cfg.adminRoleIds.length}\n• Staff roles: ${cfg.staffRoleIds.length}\n• Open tickets tracked: ${cfg.tickets.filter((t) => t.status === "open").length}`);
     if (sub === "panel") {
       const action = options.find((o) => o.name === "action")?.value;
       if (action === "preview") return { type: 4, data: { ...panelPayload(), flags: 64 } };
@@ -119,21 +119,17 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       return response(`Ticket panel published in <#${channelId}>.`);
     }
     if (sub === "reset") {
-      cfg.categoryId = null; cfg.panelChannelId = null; cfg.panelMessageId = null; cfg.logChannelId = null; cfg.adminRoleIds = []; cfg.staffRoleIds = [];
+      cfg.categoryId = null; cfg.panelChannelId = null; cfg.panelMessageId = null; cfg.logChannelId = null; cfg.transcriptChannelId = null; cfg.transcriptsEnabled = false; cfg.transcriptIncludeAttachments = true; cfg.adminRoleIds = []; cfg.staffRoleIds = [];
       await writeJson(configPath(guildId), cfg);
       return response("Relay configuration reset. Existing ticket channels have not been deleted.");
     }
-    if (sub === "staff" || sub === "buttons" || sub === "logs" || sub === "transcripts") {
-      const title = sub === "staff" ? "Staff Role Manager" : sub === "buttons" ? "Ticket Button Manager" : sub === "logs" ? "Logging Settings" : "Transcript Settings";
-      const hint = sub === "buttons"
-        ? "The HTTP runtime currently supports the default Open a Ticket panel button. Custom per-ticket-type button editing is not yet implemented."
-        : sub === "transcripts"
-        ? "Transcript export requires a separate storage/export flow; it is not yet implemented in this HTTP runtime."
-        : sub === "logs"
-        ? "Select a channel below to receive ticket lifecycle logs."
-        : "Select staff roles below. Staff can claim tickets and access ticket channels.";
-      return response(`**${title}**\n${hint}`, true, sub === "staff" ? [roleSelect("config:staff_roles_select", "Select support staff roles"), roleSelect("config:admin_roles_select", "Select ticket admin roles")] : sub === "logs" ? [channelSelect("config:log_channel_select", "Select logging channel", [0])] : []);
-    }
+    if (sub === "staff") return response("**Staff Role Manager**\\nSelect global staff roles. Staff can claim tickets and access ticket channels.", true, [roleSelect("config:staff_roles_select", "Select support staff roles"), roleSelect("config:admin_roles_select", "Select ticket admin roles")]);
+    if (sub === "logs") return response("**Logging Settings**\\nSelect a channel for ticket lifecycle logs.", true, [channelSelect("config:log_channel_select", "Select logging channel", [0])]);
+    if (sub === "transcripts") return response(`**Transcript Settings**\\n• Enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\\n• Destination: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not set"}\\n• Include attachments: ${cfg.transcriptIncludeAttachments ? "yes" : "no"}\\n\\nTranscript delivery is not active yet; these settings are saved for the transcript exporter.`, true, [
+      channelSelect("config:transcript_channel_select", "Select transcript destination", [0]),
+      row(button("config:transcript_toggle", cfg.transcriptsEnabled ? "Disable Transcripts" : "Enable Transcripts", cfg.transcriptsEnabled ? 4 : 3), button("config:transcript_attachments_toggle", cfg.transcriptIncludeAttachments ? "Exclude Attachments" : "Include Attachments")),
+    ]);
+    if (sub === "buttons") return response("**Ticket Button Manager**\\nThis runtime currently supports the default Open a Ticket button only. Custom ticket types, button editing, ordering, and per-button rules are not implemented yet, so this manager is intentionally unavailable rather than implying those controls work.");
     return response("Unknown /ticket subcommand.");
   }
   if (i.type === 3) {
@@ -156,6 +152,26 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         cfg.logChannelId = selected;
         await writeJson(configPath(guildId), cfg);
         return updateResponse(`Logging channel set to <#${selected}>.`);
+      }
+      if (customId === "config:transcript_channel_select") {
+        const selected = data.values?.[0];
+        if (!selected) return response("Select a transcript destination channel.");
+        cfg.transcriptChannelId = selected;
+        await writeJson(configPath(guildId), cfg);
+        return updateResponse(`Transcript destination saved as <#${selected}>. Transcript export is not active yet.`);
+      }
+      if (customId === "config:transcript_toggle") {
+        cfg.transcriptsEnabled = !cfg.transcriptsEnabled;
+        await writeJson(configPath(guildId), cfg);
+        return updateResponse(`Transcript setting saved: ${cfg.transcriptsEnabled ? "enabled" : "disabled"}. Export is not active yet.`, [
+          channelSelect("config:transcript_channel_select", "Select transcript destination", [0]),
+          row(button("config:transcript_toggle", cfg.transcriptsEnabled ? "Disable Transcripts" : "Enable Transcripts", cfg.transcriptsEnabled ? 4 : 3), button("config:transcript_attachments_toggle", cfg.transcriptIncludeAttachments ? "Exclude Attachments" : "Include Attachments")),
+        ]);
+      }
+      if (customId === "config:transcript_attachments_toggle") {
+        cfg.transcriptIncludeAttachments = !cfg.transcriptIncludeAttachments;
+        await writeJson(configPath(guildId), cfg);
+        return updateResponse(`Transcript attachment preference saved: ${cfg.transcriptIncludeAttachments ? "included" : "excluded"}. Export is not active yet.`);
       }
       if (customId === "config:show_config") {
         return updateResponse(`**Relay Configuration**\n• Ticket category: ${cfg.categoryId ? `<#${cfg.categoryId}>` : "not configured"}\n• Panel channel: ${cfg.panelChannelId ? `<#${cfg.panelChannelId}>` : "not configured"}\n• Logging channel: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : "not configured"}\n• Admin roles: ${cfg.adminRoleIds.length}\n• Staff roles: ${cfg.staffRoleIds.length}\n• Open tickets: ${cfg.tickets.filter((t) => t.status === "open").length}`);
