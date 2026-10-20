@@ -47,6 +47,27 @@ async function log(cfg: GuildConfig, title: string, description: string) {
   if (!cfg.logChannelId) return;
   await discordRequest(`/channels/${cfg.logChannelId}/messages`, { method: "POST", body: JSON.stringify({ embeds: [embed(title, description)], allowed_mentions: { parse: [] } }) }).catch((err) => console.error("[relay log]", err));
 }
+type DiscordMessage = { id: string; author?: { username?: string; global_name?: string; bot?: boolean }; content?: string; timestamp?: string; attachments?: Array<{ url: string; filename: string }> };
+async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: string): Promise<void> {
+  if (!cfg.transcriptsEnabled || !cfg.transcriptChannelId) return;
+  const messages = await discordRequest<DiscordMessage[]>(`/channels/${channelId}/messages?limit=100`);
+  const ordered = [...messages].reverse();
+  const lines = ordered.map((m) => {
+    const attachments = cfg.transcriptIncludeAttachments ? (m.attachments ?? []).map((a) => ` [attachment: ${a.filename} ${a.url}]`).join("") : "";
+    return `[${m.timestamp ?? "unknown time"}] ${m.author?.global_name ?? m.author?.username ?? "Unknown"}: ${(m.content ?? "").replace(/\\n/g, " ")}${attachments}`;
+  });
+  const header = `Relay transcript for channel ${channelId} (ticket owner ${ownerId})\\nMessages captured: ${ordered.length}\\n\\n`;
+  const chunks: string[] = [];
+  let current = header;
+  for (const line of lines) {
+    if (current.length + line.length + 1 > 1800) { chunks.push(current); current = ""; }
+    current += line + "\\n";
+  }
+  if (current.trim()) chunks.push(current);
+  for (let n = 0; n < chunks.length; n++) {
+    await discordRequest(`/channels/${cfg.transcriptChannelId}/messages`, { method: "POST", body: JSON.stringify({ content: `**Ticket transcript ${channelId} — part ${n + 1}/${chunks.length}**\\n\\`\\`\\`text\\n${chunks[n].slice(0, 1800)}\\`\\`\\`, allowed_mentions: { parse: [] } }) });
+  }
+}
 async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general") {
   const ticketButton = (cfg.buttons ?? []).find((b) => b.id === buttonId && b.enabled) ?? (buttonId === "general" ? { id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true } : null);
   if (!ticketButton) return response("That ticket option is no longer available. Ask an administrator to update the panel.");
@@ -133,7 +154,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
     }
     if (sub === "staff") return response("**Staff Role Manager**\\nSelect global staff roles. Staff can claim tickets and access ticket channels.", true, [roleSelect("config:staff_roles_select", "Select support staff roles"), roleSelect("config:admin_roles_select", "Select ticket admin roles")]);
     if (sub === "logs") return response("**Logging Settings**\\nSelect a channel for ticket lifecycle logs.", true, [channelSelect("config:log_channel_select", "Select logging channel", [0])]);
-    if (sub === "transcripts") return response(`**Transcript Settings**\\n• Enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\\n• Destination: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not set"}\\n• Include attachments: ${cfg.transcriptIncludeAttachments ? "yes" : "no"}\\n\\nTranscript delivery is not active yet; these settings are saved for the transcript exporter.`, true, [
+    if (sub === "transcripts") return response(`**Transcript Settings**\\n• Enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\\n• Destination: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not set"}\\n• Include attachments: ${cfg.transcriptIncludeAttachments ? "yes" : "no"}\\n\\nWhen enabled, Relay captures the latest 100 messages on ticket close and sends them to the selected channel.`, true, [
       channelSelect("config:transcript_channel_select", "Select transcript destination", [0]),
       row(button("config:transcript_toggle", cfg.transcriptsEnabled ? "Disable Transcripts" : "Enable Transcripts", cfg.transcriptsEnabled ? 4 : 3), button("config:transcript_attachments_toggle", cfg.transcriptIncludeAttachments ? "Exclude Attachments" : "Include Attachments")),
     ]);
@@ -166,12 +187,12 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         if (!selected) return response("Select a transcript destination channel.");
         cfg.transcriptChannelId = selected;
         await writeJson(configPath(guildId), cfg);
-        return updateResponse(`Transcript destination saved as <#${selected}>. Transcript export is not active yet.`);
+        return updateResponse(`Transcript destination saved as <#${selected}>.`);
       }
       if (customId === "config:transcript_toggle") {
         cfg.transcriptsEnabled = !cfg.transcriptsEnabled;
         await writeJson(configPath(guildId), cfg);
-        return updateResponse(`Transcript setting saved: ${cfg.transcriptsEnabled ? "enabled" : "disabled"}. Export is not active yet.`, [
+        return updateResponse(`Transcript delivery ${cfg.transcriptsEnabled ? "enabled" : "disabled"}.`, [
           channelSelect("config:transcript_channel_select", "Select transcript destination", [0]),
           row(button("config:transcript_toggle", cfg.transcriptsEnabled ? "Disable Transcripts" : "Enable Transcripts", cfg.transcriptsEnabled ? 4 : 3), button("config:transcript_attachments_toggle", cfg.transcriptIncludeAttachments ? "Exclude Attachments" : "Include Attachments")),
         ]);
@@ -250,11 +271,21 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         await log(cfg, "Ticket Claimed", `Ticket <#${channelId}> claimed by <@${uid}>.`);
         return response("Ticket claimed.");
       }
+      if (action === "reopen") {
+        if (ticket.ownerId !== uid && !isStaff(i, cfg)) return response("Only the ticket creator or authorized staff can reopen this ticket.");
+        ticket.status = "open";
+        await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: [{ id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, allow: "3072" }, ...new Set([...cfg.staffRoleIds, ...cfg.adminRoleIds]).values()].map((x) => typeof x === "string" ? ({ id: x, type: 0, allow: "3072" }) : x) }) });
+        await writeJson(configPath(guildId), cfg);
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket reopened by <@${uid}>.`, components: [row(button(`ticket:claim:${channelId}`, "Claim", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4))], allowed_mentions: { parse: [], users: [uid] } }) });
+        await log(cfg, "Ticket Reopened", `Ticket <#${channelId}> reopened by <@${uid}>.`);
+        return response("Ticket reopened.");
+      }
       if (action === "close") {
         if (ticket.ownerId !== uid && !isStaff(i, cfg)) return response("Only the ticket creator or authorized staff can close this ticket.");
+        await deliverTranscript(cfg, channelId, ticket.ownerId).catch((err) => console.error("[relay transcript]", err));
         ticket.status = "closed";
         await writeJson(configPath(guildId), cfg);
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket closed by <@${uid}>.`, allowed_mentions: { parse: [], users: [uid] } }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket closed by <@${uid}>.`, components: [row(button(`ticket:reopen:${channelId}`, "Reopen Ticket", 3))], allowed_mentions: { parse: [], users: [uid] } }) });
         await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: `closed-${channelId.slice(-6)}`, permission_overwrites: [
           { id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, deny: "2048" },
           ...cfg.staffRoleIds.map((id) => ({ id, type: 0, allow: "3072" })),
