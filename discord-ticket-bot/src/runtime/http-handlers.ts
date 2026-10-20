@@ -42,6 +42,7 @@ function panelPayload(cfg: GuildConfig) {
   const active = (cfg.buttons ?? []).filter((b) => b.enabled).slice(0, 125);
   const embeds = [embed("🎫 Support Tickets", "Need help? Choose the option that best matches your issue and our team will assist you.\\n\\nYour ticket will be private to you and the support team.")];
   const components: Array<Record<string, unknown>> = [];
+  if (active.length === 0) active.push({ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true });
   if (active.length <= 25) {
     const controls = active.map((b) => button(`ticket:open:${b.id}`, `${b.emoji ? `${b.emoji} ` : ""}${b.label}`.slice(0, 80), b.style));
     for (let n = 0; n < controls.length; n += 5) components.push(row(...controls.slice(n, n + 5)));
