@@ -28,10 +28,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(payload);
   } catch (error) {
     console.error("[relay-http-interaction] Failed:", error);
-    // Do not expose tokens, configuration, or provider internals in interaction responses.
-    return NextResponse.json({
-      type: 4,
-      data: { content: "Relay couldn't complete that action. Check the bot's server configuration and try again.", flags: 64 },
-    });
+    const details = error && typeof error === "object" ? error as { status?: number; discordCode?: number; message?: string } : {};
+    const content = details.status === 403 || details.discordCode === 50013
+      ? "Relay is missing a Discord permission for this action. Give the bot Manage Channels, View Channels, Send Messages, and Read Message History, then try again."
+      : details.status === 401 || details.discordCode === 50001
+        ? "Relay cannot access this Discord resource. Check that the bot is still in the server and has access to the configured channels."
+        : "Relay couldn't complete that action. Check the bot's server configuration and try again.";
+    // Keep credentials and provider internals out of user-facing interaction responses.
+    return NextResponse.json({ type: 4, data: { content, flags: 64 } });
   }
 }
