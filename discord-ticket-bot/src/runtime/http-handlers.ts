@@ -22,6 +22,7 @@ const row = (...components: unknown[]) => ({ type: 1, components });
 const channelSelect = (custom_id: string, placeholder: string, channel_types: number[]) => ({ type: 1, components: [{ type: 8, custom_id, placeholder, min_values: 1, max_values: 1, channel_types }] });
 const roleSelect = (custom_id: string, placeholder: string) => ({ type: 1, components: [{ type: 6, custom_id, placeholder, min_values: 0, max_values: 10 }] });
 const userSelect = (custom_id: string, placeholder: string) => ({ type: 1, components: [{ type: 5, custom_id, placeholder, min_values: 1, max_values: 5 }] });
+const stringSelect = (custom_id: string, placeholder: string, options: Array<{ label: string; value: string; description?: string }>) => ({ type: 1, components: [{ type: 3, custom_id, placeholder, min_values: 1, max_values: 1, options: options.slice(0, 25) }] });
 const configMenu = (cfg: GuildConfig) => [
   channelSelect("config:category_select", "Select ticket parent category", [4]),
   channelSelect("config:panel_channel_select", "Select panel destination channel", [0]),
@@ -38,36 +39,72 @@ function isAdmin(i: Interaction, cfg: GuildConfig): boolean {
 const isStaff = (i: Interaction, cfg: GuildConfig) => isAdmin(i, cfg) || (i.member?.roles ?? []).some((r) => cfg.staffRoleIds.includes(r));
 const embed = (title: string, description: string, color = 5793266) => ({ title, description, color, footer: { text: "Relay • ZeroTech" } });
 function panelPayload(cfg: GuildConfig) {
-  const active = (cfg.buttons ?? []).filter((b) => b.enabled).slice(0, 25);
-  const controls = active.length ? active.map((b) => button(`ticket:open:${b.id}`, `${b.emoji ? `${b.emoji} ` : ""}${b.label}`.slice(0, 80), b.style)) : [button("ticket:open:general", "Open a Ticket", 1)];
-  const components = [];
-  for (let n = 0; n < controls.length; n += 5) components.push(row(...controls.slice(n, n + 5)));
-  return { embeds: [embed("🎫 Support Tickets", "Need help? Click a button below and our team will assist you.\n\nYour ticket will be private to you and the support team.")], components, allowed_mentions: { parse: [] } };
+  const active = (cfg.buttons ?? []).filter((b) => b.enabled).slice(0, 125);
+  const embeds = [embed("🎫 Support Tickets", "Need help? Choose the option that best matches your issue and our team will assist you.\\n\\nYour ticket will be private to you and the support team.")];
+  const components: Array<Record<string, unknown>> = [];
+  if (active.length === 0) active.push({ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true });
+  if (active.length <= 25) {
+    const controls = active.map((b) => button(`ticket:open:${b.id}`, `${b.emoji ? `${b.emoji} ` : ""}${b.label}`.slice(0, 80), b.style));
+    for (let n = 0; n < controls.length; n += 5) components.push(row(...controls.slice(n, n + 5)));
+  } else {
+    for (let offset = 0; offset < active.length; offset += 25) {
+      const group = active.slice(offset, offset + 25);
+      components.push(row({ type: 3, custom_id: `ticket:select:${Math.floor(offset / 25)}`, placeholder: `Choose a ticket type (${offset + 1}-${offset + group.length})`, min_values: 1, max_values: 1, options: group.map((b) => ({ label: b.label.slice(0, 100), value: b.id, ...(b.emoji ? { emoji: { name: b.emoji } } : {}) })) }));
+    }
+  }
+  return { embeds, components, allowed_mentions: { parse: [] } };
 }
 async function log(cfg: GuildConfig, title: string, description: string) {
   if (!cfg.logChannelId) return;
   await discordRequest(`/channels/${cfg.logChannelId}/messages`, { method: "POST", body: JSON.stringify({ embeds: [embed(title, description)], allowed_mentions: { parse: [] } }) }).catch((err) => console.error("[relay log]", err));
 }
-type DiscordMessage = { id: string; author?: { username?: string; global_name?: string; bot?: boolean }; content?: string; timestamp?: string; attachments?: Array<{ url: string; filename: string }> };
+type DiscordMessage = { id: string; author?: { id?: string; username?: string; global_name?: string; bot?: boolean }; content?: string; timestamp?: string; attachments?: Array<{ url: string; filename: string }>; embeds?: Array<{ title?: string; description?: string }>  };
 async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: string): Promise<void> {
   if (!cfg.transcriptsEnabled || !cfg.transcriptChannelId) return;
-  const messages = await discordRequest<DiscordMessage[]>(`/channels/${channelId}/messages?limit=100`);
-  const ordered = [...messages].reverse();
-  const lines = ordered.map((m) => {
-    const attachments = cfg.transcriptIncludeAttachments ? (m.attachments ?? []).map((a) => ` [attachment: ${a.filename} ${a.url}]`).join("") : "";
-    return `[${m.timestamp ?? "unknown time"}] ${m.author?.global_name ?? m.author?.username ?? "Unknown"}: ${(m.content ?? "").replace(/\n/g, " ")}${attachments}`;
-  });
-  const header = `Relay transcript for channel ${channelId} (ticket owner ${ownerId})\nMessages captured: ${ordered.length}\n\n`;
-  const chunks: string[] = [];
-  let current = header;
-  for (const line of lines) {
-    if (current.length + line.length + 1 > 1800) { chunks.push(current); current = ""; }
-    current += line + "\n";
+  // Keep export fast enough to finish within Discord's interaction deadline.
+  const newestFirst = await discordRequest<DiscordMessage[]>(`/channels/${channelId}/messages?limit=100`);
+  const ordered = [...newestFirst].reverse();
+  const date = (value?: string) => {
+    if (!value) return "Unknown time";
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().replace("T", " ").replace("Z", " UTC");
+  };
+  const lines = [
+    "RELAY SUPPORT TICKET TRANSCRIPT",
+    "=".repeat(72),
+    `Ticket channel: #${channelId}`,
+    `Ticket owner: ${ownerId}`,
+    `Exported: ${new Date().toISOString()}`,
+    `Messages included: ${ordered.length}`,
+    newestFirst.length === 100 ? "NOTE: Discord export includes the latest 100 messages." : "",
+    "=".repeat(72),
+    "",
+  ].filter((line) => line !== undefined);
+  for (const m of ordered) {
+    const author = m.author?.global_name ?? m.author?.username ?? "Unknown user";
+    lines.push(`[${date(m.timestamp)}] ${author}${m.author?.username ? " (@" + m.author.username + ")" : ""}${m.author?.id ? " [ID: " + m.author.id + "]" : ""}`);
+    if (m.author?.bot) lines.push("  [BOT MESSAGE]");
+    lines.push(m.content?.trim() || (m.attachments?.length ? "[No text content]" : "[Empty message]"));
+    for (const e of m.embeds ?? []) {
+      if (e.title) lines.push(`  [EMBED TITLE] ${e.title}`);
+      if (e.description) lines.push(`  [EMBED] ${e.description}`);
+    }
+    if (cfg.transcriptIncludeAttachments) {
+      for (const attachment of m.attachments ?? []) {
+        lines.push(`  [ATTACHMENT] ${attachment.filename}: ${attachment.url}`);
+      }
+    }
+    lines.push("");
   }
-  if (current.trim()) chunks.push(current);
-  for (let n = 0; n < chunks.length; n++) {
-    await discordRequest(`/channels/${cfg.transcriptChannelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket transcript ${channelId} — part ${n + 1}/${chunks.length}\n${chunks[n].slice(0, 1800)}`, allowed_mentions: { parse: [] } }) });
-  }
+  const textContent = lines.join("\n").replace(/\n{4,}/g, "\n\n\n");
+  const filename = `relay-transcript-${channelId}-${new Date().toISOString().slice(0, 10)}.txt`;
+  const form = new FormData();
+  form.append("payload_json", JSON.stringify({
+    content: `📄 **Ticket transcript** — <#${channelId}> (owner <@${ownerId}>)`,
+    allowed_mentions: { parse: [] },
+  }));
+  form.append("files[0]", new Blob([textContent], { type: "text/plain; charset=utf-8" }), filename);
+  await discordRequest(`/channels/${cfg.transcriptChannelId}/messages`, { method: "POST", body: form });
 }
 async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general") {
   const ticketButton = (cfg.buttons ?? []).find((b) => b.id === buttonId && b.enabled) ?? (buttonId === "general" ? { id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true } : null);
@@ -159,11 +196,25 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       channelSelect("config:transcript_channel_select", "Select transcript destination", [0]),
       row(button("config:transcript_toggle", cfg.transcriptsEnabled ? "Disable Transcripts" : "Enable Transcripts", cfg.transcriptsEnabled ? 4 : 3), button("config:transcript_attachments_toggle", cfg.transcriptIncludeAttachments ? "Exclude Attachments" : "Include Attachments")),
     ]);
-    if (sub === "buttons") return response(`**Ticket Button Manager**\n${(cfg.buttons ?? []).map((b, n) => `${n + 1}. ${b.enabled ? "🟢" : "⚪"} ${b.emoji ?? ""} **${b.label}** — ${b.id}`).join("\n") || "No buttons configured."}\n\nAdd common ticket types, toggle them, delete them, or republish the panel.`, true, [row(button("buttons:add:general", "Add General", 1), button("buttons:add:billing", "Add Billing"), button("buttons:add:technical", "Add Technical")), ...(cfg.buttons ?? []).slice(0, 4).map((b, idx) => row(button(`buttons:edit:${b.id}`, "Edit", 1), button(`buttons:up:${b.id}`, "↑", 2), button(`buttons:down:${b.id}`, "↓", 2), button(`buttons:toggle:${b.id}`, b.enabled ? "Disable" : "Enable", b.enabled ? 4 : 3), button(`buttons:delete:${b.id}`, "Delete", 4))), row(button("buttons:publish", "Publish / Update Panel", 1))]);
+    if (sub === "buttons") return response(`**Ticket Button Manager**\n${(cfg.buttons ?? []).map((b, n) => `${n + 1}. ${b.enabled ? "🟢" : "⚪"} ${b.emoji ?? ""} **${b.label}** — ${b.id}`).join("\n") || "No buttons configured."}\n\nAdd ticket types, select any type to edit/reorder/enable/delete it, then publish the panel.`, true, [row(button("buttons:add-custom", "➕ Add Custom", 1), button("buttons:add:general", "Add General"), button("buttons:add:billing", "Add Billing"), button("buttons:add:technical", "Add Technical")), ...((cfg.buttons ?? []).length ? [stringSelect("buttons:select", "Choose a ticket type to manage", (cfg.buttons ?? []).map((b) => ({ label: b.label, value: b.id, description: `${b.enabled ? "Enabled" : "Disabled"} · ${b.id}` })))] : []), row(button("buttons:publish", "Publish / Update Panel", 1))]);
     return response("Unknown /ticket subcommand.");
   }
   if (i.type === 5) {
     const customId = data.custom_id ?? "";
+    if (customId === "buttons:add-submit") {
+      if (!isAdmin(i, cfg)) return response("Only ticket administrators can add panel buttons.");
+      const fields = new Map((data.components ?? []).flatMap((r) => r.components ?? []).map((c) => [c.custom_id ?? "", c.value ?? ""]));
+      const label = (fields.get("label") ?? "").trim().slice(0, 80);
+      if (!label) return response("Button label cannot be empty.");
+      if ((cfg.buttons ?? []).length >= 125) return response("Relay supports up to 125 ticket types on a panel.");
+      const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 35) || `type-${Date.now()}`;
+      if ((cfg.buttons ?? []).some((b) => b.id === id)) return response("A button with a similar name already exists. Choose a different label.");
+      const styleValue = Number(fields.get("style") ?? "1");
+      cfg.buttons.push({ id, label, emoji: fields.get("emoji")?.trim().slice(0, 20) || null, style: [1, 2, 3, 4].includes(styleValue) ? styleValue : 1, channelName: (fields.get("channel_name") ?? "ticket-{username}").trim().slice(0, 90) || "ticket-{username}", openingMessage: (fields.get("opening_message") ?? "Thanks for reaching out! Support will be with you shortly.").trim().slice(0, 1500), staffRoleIds: [], enabled: true });
+      await writeJson(configPath(guildId), cfg);
+      return response(`Added ticket type **${label}**. Use /ticket buttons to publish the updated panel.`);
+    }
+    if (!customId.startsWith("buttons:edit-submit:")) return response("Unknown Relay form.");
     if (!customId.startsWith("buttons:edit-submit:")) return response("Unknown Relay form.");
     if (!isAdmin(i, cfg)) return response("Only ticket administrators can edit panel buttons.");
     const id = customId.split(":")[2];
@@ -251,6 +302,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       }
     }
     if (customId === "ticket:open" || customId.startsWith("ticket:open:")) return await openTicket(i, cfg, customId.split(":")[2] || "general");
+    if (customId.startsWith("ticket:select:") && data.values?.[0]) return await openTicket(i, cfg, data.values[0]);
     if (customId.startsWith("buttons:staff:")) {
       if (!isAdmin(i, cfg)) return response("Only ticket administrators can configure ticket-type staff roles.");
       const id = customId.split(":")[2];
@@ -260,6 +312,26 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       await writeJson(configPath(guildId), cfg);
       return updateResponse(`Staff roles saved for ${target.label} (${target.staffRoleIds.length} role(s)).`);
     }
+    if (customId === "buttons:add-custom") {
+      if (!isAdmin(i, cfg)) return response("Only ticket administrators can add panel buttons.");
+      return { type: 9, data: { custom_id: "buttons:add-submit", title: "Add Ticket Type", components: [
+        { type: 1, components: [{ type: 4, custom_id: "label", label: "Button label", style: 1, required: true, max_length: 80 }] },
+        { type: 1, components: [{ type: 4, custom_id: "emoji", label: "Emoji (optional)", style: 1, required: false, max_length: 20 }] },
+        { type: 1, components: [{ type: 4, custom_id: "channel_name", label: "Channel name ({username})", style: 1, required: false, max_length: 90, value: "ticket-{username}" }] },
+        { type: 1, components: [{ type: 4, custom_id: "opening_message", label: "Opening message", style: 2, required: false, max_length: 1500, value: "Thanks for reaching out! Support will be with you shortly." }] },
+        { type: 1, components: [{ type: 4, custom_id: "style", label: "Style 1=blue, 2=grey, 3=green, 4=red", style: 1, required: true, max_length: 1, value: "1" }] },
+      ] } };
+    }
+    if (customId.startsWith("buttons:edit:")) {
+      if (!isAdmin(i, cfg)) return response("Only ticket administrators can add panel buttons.");
+      return { type: 9, data: { custom_id: "buttons:add-submit", title: "Add Ticket Type", components: [
+        { type: 1, components: [{ type: 4, custom_id: "label", label: "Button label", style: 1, required: true, max_length: 80 }] },
+        { type: 1, components: [{ type: 4, custom_id: "emoji", label: "Emoji (optional)", style: 1, required: false, max_length: 20 }] },
+        { type: 1, components: [{ type: 4, custom_id: "channel_name", label: "Channel name ({username})", style: 1, required: false, max_length: 90, value: "ticket-{username}" }] },
+        { type: 1, components: [{ type: 4, custom_id: "opening_message", label: "Opening message", style: 2, required: false, max_length: 1500, value: "Thanks for reaching out! Support will be with you shortly." }] },
+        { type: 1, components: [{ type: 4, custom_id: "style", label: "Style 1=blue, 2=grey, 3=green, 4=red", style: 1, required: true, max_length: 1, value: "1" }] },
+      ] } };
+    }
     if (customId.startsWith("buttons:edit:")) {
       if (!isAdmin(i, cfg)) return response("Only ticket administrators can edit panel buttons.");
       const id = customId.split(":")[2];
@@ -267,6 +339,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       if (!target) return response("Button not found.");
       return { type: 9, data: { custom_id: `buttons:edit-submit:${id}`, title: `Edit ${target.label}`.slice(0, 45), components: [
         { type: 1, components: [{ type: 4, custom_id: "label", label: "Button label", style: 1, required: true, max_length: 80, value: target.label }] },
+        { type: 1, components: [{ type: 4, custom_id: "emoji", label: "Emoji (optional)", style: 1, required: false, max_length: 20, value: target.emoji ?? "" }] },
         { type: 1, components: [{ type: 4, custom_id: "channel_name", label: "Channel name ({username})", style: 1, required: false, max_length: 90, value: target.channelName }] },
         { type: 1, components: [{ type: 4, custom_id: "opening_message", label: "Opening message", style: 2, required: false, max_length: 1500, value: target.openingMessage }] },
         { type: 1, components: [{ type: 4, custom_id: "style", label: "Style 1=blue, 2=grey, 3=green, 4=red", style: 1, required: true, max_length: 1, value: String(target.style) }] },
@@ -276,8 +349,14 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       if (!isAdmin(i, cfg)) return response("Only ticket administrators can manage panel buttons.");
       const [, action, value] = customId.split(":");
       cfg.buttons ??= [];
+      if (action === "select") {
+        const selectedId = data.values?.[0];
+        const selected = cfg.buttons.find((b) => b.id === selectedId);
+        if (!selected) return response("Button not found.");
+        return updateResponse(`**${selected.emoji ?? "🔘"} ${selected.label}**\nStatus: ${selected.enabled ? "Enabled" : "Disabled"}\nChannel format: \`${selected.channelName}\``, [row(button(`buttons:edit:${selected.id}`, "Edit", 1), button(`buttons:up:${selected.id}`, "Move Up"), button(`buttons:down:${selected.id}`, "Move Down"), button(`buttons:toggle:${selected.id}`, selected.enabled ? "Disable" : "Enable", selected.enabled ? 4 : 3), button(`buttons:delete:${selected.id}`, "Delete", 4)), row(button("buttons:publish", "Publish / Update Panel", 1))]);
+      }
       if (action === "add") {
-        if (cfg.buttons.length >= 25) return response("Discord panels support at most 25 buttons.");
+        if (cfg.buttons.length >= 125) return response("Relay supports up to 125 ticket types.");
         if (cfg.buttons.some((b) => b.id === value)) return response("That button type already exists.");
         const presets: Record<string, Omit<TicketButton, "enabled">> = {
           general: { id: "general", label: "General Support", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [] },

@@ -31,7 +31,7 @@ export async function discordRequest<T>(
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bot ${botToken()}`);
   headers.set("User-Agent", "Relay (https://github.com/xxSwar4jxx/Relay, 2.0.0)");
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (init.body && !headers.has("Content-Type") && !(typeof FormData !== "undefined" && init.body instanceof FormData)) headers.set("Content-Type", "application/json");
 
   const response = await fetch(`${DISCORD_API}${path}`, {
     ...init,
