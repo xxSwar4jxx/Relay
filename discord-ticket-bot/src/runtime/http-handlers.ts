@@ -149,7 +149,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       return response(`Ticket panel published in <#${channelId}>.`);
     }
     if (sub === "reset") {
-      cfg.categoryId = null; cfg.panelChannelId = null; cfg.panelMessageId = null; cfg.logChannelId = null; cfg.transcriptChannelId = null; cfg.transcriptsEnabled = false; cfg.transcriptIncludeAttachments = true; cfg.adminRoleIds = []; cfg.staffRoleIds = [];
+      cfg.categoryId = null; cfg.panelChannelId = null; cfg.panelMessageId = null; cfg.logChannelId = null; cfg.transcriptChannelId = null; cfg.transcriptsEnabled = false; cfg.transcriptIncludeAttachments = true; cfg.adminRoleIds = []; cfg.staffRoleIds = []; cfg.buttons = [{ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true }];
       await writeJson(configPath(guildId), cfg);
       return response("Relay configuration reset. Existing ticket channels have not been deleted.");
     }
@@ -247,6 +247,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         };
         const preset = presets[value]; if (!preset) return response("Unknown ticket button preset."); cfg.buttons.push({ ...preset, enabled: true });
       } else if (action === "toggle") { const b = cfg.buttons.find((x) => x.id === value); if (!b) return response("Button not found."); b.enabled = !b.enabled; }
+      else if (action === "up" || action === "down") { const idx = cfg.buttons.findIndex((b) => b.id === value); if (idx < 0) return response("Button not found."); const next = action === "up" ? idx - 1 : idx + 1; if (next >= 0 && next < cfg.buttons.length) [cfg.buttons[idx], cfg.buttons[next]] = [cfg.buttons[next], cfg.buttons[idx]]; }
       else if (action === "delete") { if (cfg.buttons.length <= 1) return response("Keep at least one ticket button configured."); cfg.buttons = cfg.buttons.filter((b) => b.id !== value); }
       else if (action === "publish") {
         if (!cfg.panelChannelId) return response("Select a panel channel with `/ticket setup` first.");
