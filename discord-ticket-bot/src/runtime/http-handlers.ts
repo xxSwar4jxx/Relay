@@ -59,19 +59,9 @@ async function log(cfg: GuildConfig, title: string, description: string) {
 type DiscordMessage = { id: string; author?: { id?: string; username?: string; global_name?: string; bot?: boolean }; content?: string; timestamp?: string; attachments?: Array<{ url: string; filename: string }>; embeds?: Array<{ title?: string; description?: string }>  };
 async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: string): Promise<void> {
   if (!cfg.transcriptsEnabled || !cfg.transcriptChannelId) return;
-  const messages: DiscordMessage[] = [];
-  let before: string | undefined;
-  const maxMessages = 1000;
-  for (let page = 0; page < 10; page++) {
-    const query = new URLSearchParams({ limit: "100" });
-    if (before) query.set("before", before);
-    const batch = await discordRequest<DiscordMessage[]>(`/channels/${channelId}/messages?${query.toString()}`);
-    if (!batch.length) break;
-    messages.push(...batch);
-    before = batch[batch.length - 1]?.id;
-    if (batch.length < 100 || messages.length >= maxMessages) break;
-  }
-  const ordered = messages.slice(0, maxMessages).reverse();
+  // Keep export fast enough to finish within Discord's interaction deadline.
+  const newestFirst = await discordRequest<DiscordMessage[]>(`/channels/${channelId}/messages?limit=100`);
+  const ordered = [...newestFirst].reverse();
   const date = (value?: string) => {
     if (!value) return "Unknown time";
     const parsed = new Date(value);
@@ -84,7 +74,7 @@ async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: s
     `Ticket owner: ${ownerId}`,
     `Exported: ${new Date().toISOString()}`,
     `Messages included: ${ordered.length}`,
-    messages.length >= maxMessages ? `NOTE: Export capped at the latest ${maxMessages} messages.` : "",
+    newestFirst.length === 100 ? "NOTE: Discord export includes the latest 100 messages." : "",
     "=".repeat(72),
     "",
   ].filter((line) => line !== undefined);
