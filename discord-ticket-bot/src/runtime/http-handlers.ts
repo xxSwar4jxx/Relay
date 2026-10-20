@@ -55,14 +55,14 @@ async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: s
   const ordered = [...messages].reverse();
   const lines = ordered.map((m) => {
     const attachments = cfg.transcriptIncludeAttachments ? (m.attachments ?? []).map((a) => ` [attachment: ${a.filename} ${a.url}]`).join("") : "";
-    return `[${m.timestamp ?? "unknown time"}] ${m.author?.global_name ?? m.author?.username ?? "Unknown"}: ${(m.content ?? "").replace(/\\n/g, " ")}${attachments}`;
+    return `[${m.timestamp ?? "unknown time"}] ${m.author?.global_name ?? m.author?.username ?? "Unknown"}: ${(m.content ?? "").replace(/\n/g, " ")}${attachments}`;
   });
-  const header = `Relay transcript for channel ${channelId} (ticket owner ${ownerId})\\nMessages captured: ${ordered.length}\\n\\n`;
+  const header = `Relay transcript for channel ${channelId} (ticket owner ${ownerId})\nMessages captured: ${ordered.length}\n\n`;
   const chunks: string[] = [];
   let current = header;
   for (const line of lines) {
     if (current.length + line.length + 1 > 1800) { chunks.push(current); current = ""; }
-    current += line + "\\n";
+    current += line + "\n";
   }
   if (current.trim()) chunks.push(current);
   for (let n = 0; n < chunks.length; n++) {
@@ -81,7 +81,7 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
   const channelName = ticketButton.channelName.replace(/\{username\}/g, safeName).replace(/\{user\}/g, uid).replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 90) || `ticket-${safeName}`;
   const overwrites: Array<Record<string, unknown>> = [
     { id: guildId, type: 0, deny: "1024" },
-    { id: uid, type: 1, allow: "3072" },
+    { id: uid, type: 1, allow: "68608" },
   ];
   const botId = process.env.DISCORD_APPLICATION_ID;
   if (botId) overwrites.push({ id: botId, type: 1, allow: "3072" });
