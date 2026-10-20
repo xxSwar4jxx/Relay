@@ -251,7 +251,16 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       }
     }
     if (customId === "ticket:open" || customId.startsWith("ticket:open:")) return await openTicket(i, cfg, customId.split(":")[2] || "general");
-    if (customId.startsWith("buttons:staff:")) {\n      if (!isAdmin(i, cfg)) return response("Only ticket administrators can configure ticket-type staff roles.");\n      const id = customId.split(":")[2]; const target = (cfg.buttons ?? []).find((b) => b.id === id);\n      if (!target) return response("Button not found.");\n      target.staffRoleIds = data.values ?? [];\n      await writeJson(configPath(guildId), cfg);\n      return updateResponse(`Staff roles saved for ${target.label} (${target.staffRoleIds.length} role(s)).`);\n    }\n    if (customId.startsWith("buttons:edit:")) {
+    if (customId.startsWith("buttons:staff:")) {
+      if (!isAdmin(i, cfg)) return response("Only ticket administrators can configure ticket-type staff roles.");
+      const id = customId.split(":")[2];
+      const target = (cfg.buttons ?? []).find((b) => b.id === id);
+      if (!target) return response("Button not found.");
+      target.staffRoleIds = data.values ?? [];
+      await writeJson(configPath(guildId), cfg);
+      return updateResponse(`Staff roles saved for ${target.label} (${target.staffRoleIds.length} role(s)).`);
+    }
+    if (customId.startsWith("buttons:edit:")) {
       if (!isAdmin(i, cfg)) return response("Only ticket administrators can edit panel buttons.");
       const id = customId.split(":")[2];
       const target = (cfg.buttons ?? []).find((b) => b.id === id);
