@@ -92,7 +92,11 @@ async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: s
     const author = m.author?.global_name ?? m.author?.username ?? "Unknown user";
     lines.push(`[${date(m.timestamp)}] ${author}${m.author?.username ? " (@" + m.author.username + ")" : ""}${m.author?.id ? " [ID: " + m.author.id + "]" : ""}`);
     if (m.author?.bot) lines.push("  [BOT MESSAGE]");
-    lines.push(m.content?.trim() || (m.attachments?.length ? "[No text content]" : "[Empty message]"));\n    for (const e of m.embeds ?? []) {\n      if (e.title) lines.push(`  [EMBED TITLE] ${e.title}`);\n      if (e.description) lines.push(`  [EMBED] ${e.description}`);\n    }
+    lines.push(m.content?.trim() || (m.attachments?.length ? "[No text content]" : "[Empty message]"));
+    for (const e of m.embeds ?? []) {
+      if (e.title) lines.push(`  [EMBED TITLE] ${e.title}`);
+      if (e.description) lines.push(`  [EMBED] ${e.description}`);
+    }
     if (cfg.transcriptIncludeAttachments) {
       for (const attachment of m.attachments ?? []) {
         lines.push(`  [ATTACHMENT] ${attachment.filename}: ${attachment.url}`);
