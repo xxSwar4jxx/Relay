@@ -21,6 +21,7 @@ const button = (custom_id: string, label: string, style = 2) => ({ type: 2, styl
 const row = (...components: unknown[]) => ({ type: 1, components });
 const channelSelect = (custom_id: string, placeholder: string, channel_types: number[]) => ({ type: 1, components: [{ type: 8, custom_id, placeholder, min_values: 1, max_values: 1, channel_types }] });
 const roleSelect = (custom_id: string, placeholder: string) => ({ type: 1, components: [{ type: 6, custom_id, placeholder, min_values: 0, max_values: 10 }] });
+const userSelect = (custom_id: string, placeholder: string) => ({ type: 1, components: [{ type: 5, custom_id, placeholder, min_values: 1, max_values: 5 }] });
 const configMenu = (cfg: GuildConfig) => [
   channelSelect("config:category_select", "Select ticket parent category", [4]),
   channelSelect("config:panel_channel_select", "Select panel destination channel", [0]),
@@ -99,7 +100,7 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
       body: JSON.stringify({
         content: `<@${uid}> ${ticketButton.openingMessage || "Thanks for contacting support! Please describe your issue below."}\n\nStaff can claim this ticket or close it when resolved.`,
         embeds: [embed("Ticket Controls", "Use the controls below. Claiming is limited to configured staff.")],
-        components: [row(button(`ticket:claim:${created.id}`, "Claim", 3), button(`ticket:close:${created.id}`, "Close Ticket", 4))],
+        components: [row(button(`ticket:claim:${created.id}`, "Claim", 3), button(`ticket:close:${created.id}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${created.id}`, "Add members to this ticket")],
         allowed_mentions: { parse: [], users: [uid] },
       }),
     });
@@ -259,9 +260,22 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
     }
     if (customId.startsWith("ticket:")) {
       const [, action, channelId] = customId.split(":");
-      const ticket = cfg.tickets.find((t) => t.channelId === channelId && t.status === "open");
-      if (!ticket) return response("This ticket is no longer open or is not tracked by Relay.");
+      const ticket = cfg.tickets.find((t) => t.channelId === channelId);
+      if (!ticket) return response("This ticket is not tracked by Relay.");
+      if (ticket.status !== "open" && action !== "reopen") return response("This ticket is closed. Reopen it before using ticket controls.");
       const uid = userId(i);
+      if (action === "addmember") {
+        if (ticket.ownerId !== uid && !isStaff(i, cfg)) return response("Only the ticket creator or authorized staff can add members.");
+        const selected = data.values ?? [];
+        if (!selected.length) return response("Select at least one member.");
+        const current = await discordRequest<{ permission_overwrites?: Array<{ id: string; type: number; allow?: string; deny?: string }> }>(`/channels/${channelId}`);
+        const overwrites = (current.permission_overwrites ?? []).filter((o) => !selected.includes(o.id));
+        for (const memberId of selected) overwrites.push({ id: memberId, type: 1, allow: "3072" });
+        await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ permission_overwrites: overwrites }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Added to ticket: ${selected.map((id) => `<@${id}>`).join(", ")}.`, allowed_mentions: { parse: [], users: selected } }) });
+        await log(cfg, "Ticket Members Added", `${selected.map((id) => `<@${id}>`).join(", ")} added to <#${channelId}> by <@${uid}>.`);
+        return response(`Added ${selected.length} member(s) to the ticket.`);
+      }
       if (action === "claim") {
         if (!isStaff(i, cfg)) return response("Only configured support staff can claim tickets.");
         if (ticket.claimedBy && ticket.claimedBy !== uid) return response(`This ticket is already claimed by <@${ticket.claimedBy}>.`);
@@ -277,7 +291,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         const reopenOverwrites = [{ id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, allow: "3072" }, ...[...new Set([...cfg.staffRoleIds, ...cfg.adminRoleIds])].map((id) => ({ id, type: 0, allow: "3072" }))];
         await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: reopenOverwrites }) });
         await writeJson(configPath(guildId), cfg);
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket reopened by <@${uid}>.`, components: [row(button(`ticket:claim:${channelId}`, "Claim", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4))], allowed_mentions: { parse: [], users: [uid] } }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket reopened by <@${uid}>.`, components: [row(button(`ticket:claim:${channelId}`, "Claim", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket")], allowed_mentions: { parse: [], users: [uid] } }) });
         await log(cfg, "Ticket Reopened", `Ticket <#${channelId}> reopened by <@${uid}>.`);
         return response("Ticket reopened.");
       }
