@@ -65,7 +65,7 @@ async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: s
   }
   if (current.trim()) chunks.push(current);
   for (let n = 0; n < chunks.length; n++) {
-    await discordRequest(`/channels/${cfg.transcriptChannelId}/messages`, { method: "POST", body: JSON.stringify({ content: `**Ticket transcript ${channelId} — part ${n + 1}/${chunks.length}**\\n\\`\\`\\`text\\n${chunks[n].slice(0, 1800)}\\`\\`\\`, allowed_mentions: { parse: [] } }) });
+    await discordRequest(`/channels/${cfg.transcriptChannelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket transcript ${channelId} — part ${n + 1}/${chunks.length}\n${chunks[n].slice(0, 1800)}`, allowed_mentions: { parse: [] } }) });
   }
 }
 async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general") {
@@ -274,7 +274,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       if (action === "reopen") {
         if (ticket.ownerId !== uid && !isStaff(i, cfg)) return response("Only the ticket creator or authorized staff can reopen this ticket.");
         ticket.status = "open";
-        await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: [{ id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, allow: "3072" }, ...new Set([...cfg.staffRoleIds, ...cfg.adminRoleIds]).values()].map((x) => typeof x === "string" ? ({ id: x, type: 0, allow: "3072" }) : x) }) });
+        const reopenOverwrites = [{ id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, allow: "3072" }, ...[...new Set([...cfg.staffRoleIds, ...cfg.adminRoleIds])].map((id) => ({ id, type: 0, allow: "3072" }))];\n        await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: reopenOverwrites }) });
         await writeJson(configPath(guildId), cfg);
         await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket reopened by <@${uid}>.`, components: [row(button(`ticket:claim:${channelId}`, "Claim", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4))], allowed_mentions: { parse: [], users: [uid] } }) });
         await log(cfg, "Ticket Reopened", `Ticket <#${channelId}> reopened by <@${uid}>.`);
