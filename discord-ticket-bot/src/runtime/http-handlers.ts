@@ -5,7 +5,7 @@ type Interaction = {
   type: number; id: string; token: string; guild_id?: string; channel_id?: string;
   member?: { user?: { id: string; username?: string }; roles?: string[]; permissions?: string };
   user?: { id: string; username?: string };
-  data?: { name?: string; options?: Array<{ name: string; value?: string | number; options?: Array<{ name: string; value?: string | number }> }>; custom_id?: string; values?: string[] };
+  data?: { name?: string; options?: Array<{ name: string; value?: string | number; options?: Array<{ name: string; value?: string | number }> }>; custom_id?: string; values?: string[]; components?: Array<{ components?: Array<{ custom_id?: string; value?: string }> }> };
 };
 type TicketRecord = { channelId: string; ownerId: string; claimedBy: string | null; status: "open" | "closed"; createdAt: string };
 type TicketButton = { id: string; label: string; emoji: string | null; style: number; channelName: string; openingMessage: string; staffRoleIds: string[]; enabled: boolean };
@@ -159,8 +159,26 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       channelSelect("config:transcript_channel_select", "Select transcript destination", [0]),
       row(button("config:transcript_toggle", cfg.transcriptsEnabled ? "Disable Transcripts" : "Enable Transcripts", cfg.transcriptsEnabled ? 4 : 3), button("config:transcript_attachments_toggle", cfg.transcriptIncludeAttachments ? "Exclude Attachments" : "Include Attachments")),
     ]);
-    if (sub === "buttons") return response(`**Ticket Button Manager**\n${(cfg.buttons ?? []).map((b, n) => `${n + 1}. ${b.enabled ? "🟢" : "⚪"} ${b.emoji ?? ""} **${b.label}** — ${b.id}`).join("\n") || "No buttons configured."}\n\nAdd common ticket types, toggle them, delete them, or republish the panel.`, true, [row(button("buttons:add:general", "Add General", 1), button("buttons:add:billing", "Add Billing"), button("buttons:add:technical", "Add Technical")), ...(cfg.buttons ?? []).slice(0, 4).map((b, idx) => row(button(`buttons:up:${b.id}`, "↑", 2), button(`buttons:down:${b.id}`, "↓", 2), button(`buttons:toggle:${b.id}`, b.enabled ? "Disable" : "Enable", b.enabled ? 4 : 3), button(`buttons:delete:${b.id}`, "Delete", 4))), row(button("buttons:publish", "Publish / Update Panel", 1))]);
+    if (sub === "buttons") return response(`**Ticket Button Manager**\n${(cfg.buttons ?? []).map((b, n) => `${n + 1}. ${b.enabled ? "🟢" : "⚪"} ${b.emoji ?? ""} **${b.label}** — ${b.id}`).join("\n") || "No buttons configured."}\n\nAdd common ticket types, toggle them, delete them, or republish the panel.`, true, [row(button("buttons:add:general", "Add General", 1), button("buttons:add:billing", "Add Billing"), button("buttons:add:technical", "Add Technical")), ...(cfg.buttons ?? []).slice(0, 4).map((b, idx) => row(button(`buttons:edit:${b.id}`, "Edit", 1), button(`buttons:up:${b.id}`, "↑", 2), button(`buttons:down:${b.id}`, "↓", 2), button(`buttons:toggle:${b.id}`, b.enabled ? "Disable" : "Enable", b.enabled ? 4 : 3), button(`buttons:delete:${b.id}`, "Delete", 4))), row(button("buttons:publish", "Publish / Update Panel", 1))]);
     return response("Unknown /ticket subcommand.");
+  }
+  if (i.type === 5) {
+    const customId = data.custom_id ?? "";
+    if (!customId.startsWith("buttons:edit-submit:")) return response("Unknown Relay form.");
+    if (!isAdmin(i, cfg)) return response("Only ticket administrators can edit panel buttons.");
+    const id = customId.split(":")[2];
+    const target = (cfg.buttons ?? []).find((b) => b.id === id);
+    if (!target) return response("Button not found.");
+    const fields = new Map((data.components ?? []).flatMap((r) => r.components ?? []).map((c) => [c.custom_id ?? "", c.value ?? ""]));
+    const label = (fields.get("label") ?? target.label).trim().slice(0, 80);
+    if (!label) return response("Button label cannot be empty.");
+    target.label = label;
+    target.channelName = (fields.get("channel_name") ?? target.channelName).trim().slice(0, 90) || target.channelName;
+    target.openingMessage = (fields.get("opening_message") ?? target.openingMessage).trim().slice(0, 1500) || target.openingMessage;
+    const style = Number(fields.get("style"));
+    if ([1, 2, 3, 4].includes(style)) target.style = style;
+    await writeJson(configPath(guildId), cfg);
+    return response(`Updated "${target.label}". Use /ticket buttons to republish the panel.`);
   }
   if (i.type === 3) {
     const customId = data.custom_id ?? "";
@@ -233,6 +251,18 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       }
     }
     if (customId === "ticket:open" || customId.startsWith("ticket:open:")) return await openTicket(i, cfg, customId.split(":")[2] || "general");
+    if (customId.startsWith("buttons:edit:")) {
+      if (!isAdmin(i, cfg)) return response("Only ticket administrators can edit panel buttons.");
+      const id = customId.split(":")[2];
+      const target = (cfg.buttons ?? []).find((b) => b.id === id);
+      if (!target) return response("Button not found.");
+      return { type: 9, data: { custom_id: `buttons:edit-submit:${id}`, title: `Edit ${target.label}`.slice(0, 45), components: [
+        { type: 1, components: [{ type: 4, custom_id: "label", label: "Button label", style: 1, required: true, max_length: 80, value: target.label }] },
+        { type: 1, components: [{ type: 4, custom_id: "channel_name", label: "Channel name ({username})", style: 1, required: false, max_length: 90, value: target.channelName }] },
+        { type: 1, components: [{ type: 4, custom_id: "opening_message", label: "Opening message", style: 2, required: false, max_length: 1500, value: target.openingMessage }] },
+        { type: 1, components: [{ type: 4, custom_id: "style", label: "Style 1=blue, 2=grey, 3=green, 4=red", style: 1, required: true, max_length: 1, value: String(target.style) }] },
+      ] } };
+    }
     if (customId.startsWith("buttons:")) {
       if (!isAdmin(i, cfg)) return response("Only ticket administrators can manage panel buttons.");
       const [, action, value] = customId.split(":");
