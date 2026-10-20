@@ -56,7 +56,7 @@ async function log(cfg: GuildConfig, title: string, description: string) {
   if (!cfg.logChannelId) return;
   await discordRequest(`/channels/${cfg.logChannelId}/messages`, { method: "POST", body: JSON.stringify({ embeds: [embed(title, description)], allowed_mentions: { parse: [] } }) }).catch((err) => console.error("[relay log]", err));
 }
-type DiscordMessage = { id: string; author?: { username?: string; global_name?: string; bot?: boolean }; content?: string; timestamp?: string; attachments?: Array<{ url: string; filename: string }> };
+type DiscordMessage = { id: string; author?: { id?: string; username?: string; global_name?: string; bot?: boolean }; content?: string; timestamp?: string; attachments?: Array<{ url: string; filename: string }>; embeds?: Array<{ title?: string; description?: string }>  };
 async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: string): Promise<void> {
   if (!cfg.transcriptsEnabled || !cfg.transcriptChannelId) return;
   const messages: DiscordMessage[] = [];
@@ -90,9 +90,9 @@ async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: s
   ].filter((line) => line !== undefined);
   for (const m of ordered) {
     const author = m.author?.global_name ?? m.author?.username ?? "Unknown user";
-    lines.push(`[${date(m.timestamp)}] ${author} (${m.author?.username ? "@" + m.author.username : "unknown username"})`);
+    lines.push(`[${date(m.timestamp)}] ${author}${m.author?.username ? " (@" + m.author.username + ")" : ""}${m.author?.id ? " [ID: " + m.author.id + "]" : ""}`);
     if (m.author?.bot) lines.push("  [BOT MESSAGE]");
-    lines.push(m.content?.trim() || (m.attachments?.length ? "[No text content]" : "[Empty message]"));
+    lines.push(m.content?.trim() || (m.attachments?.length ? "[No text content]" : "[Empty message]"));\n    for (const e of m.embeds ?? []) {\n      if (e.title) lines.push(`  [EMBED TITLE] ${e.title}`);\n      if (e.description) lines.push(`  [EMBED] ${e.description}`);\n    }
     if (cfg.transcriptIncludeAttachments) {
       for (const attachment of m.attachments ?? []) {
         lines.push(`  [ATTACHMENT] ${attachment.filename}: ${attachment.url}`);
@@ -332,7 +332,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       if (!target) return response("Button not found.");
       return { type: 9, data: { custom_id: `buttons:edit-submit:${id}`, title: `Edit ${target.label}`.slice(0, 45), components: [
         { type: 1, components: [{ type: 4, custom_id: "label", label: "Button label", style: 1, required: true, max_length: 80, value: target.label }] },
-        { type: 1, components: [{ type: 4, custom_id: "channel_name", label: "Channel name ({username})", style: 1, required: false, max_length: 90, value: target.channelName }] },
+        { type: 1, components: [{ type: 4, custom_id: "emoji", label: "Emoji (optional)", style: 1, required: false, max_length: 20, value: target.emoji ?? "" }] },\n        { type: 1, components: [{ type: 4, custom_id: "channel_name", label: "Channel name ({username})", style: 1, required: false, max_length: 90, value: target.channelName }] },
         { type: 1, components: [{ type: 4, custom_id: "opening_message", label: "Opening message", style: 2, required: false, max_length: 1500, value: target.openingMessage }] },
         { type: 1, components: [{ type: 4, custom_id: "style", label: "Style 1=blue, 2=grey, 3=green, 4=red", style: 1, required: true, max_length: 1, value: String(target.style) }] },
       ] } };
