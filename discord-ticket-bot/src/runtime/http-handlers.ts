@@ -22,6 +22,7 @@ const row = (...components: unknown[]) => ({ type: 1, components });
 const channelSelect = (custom_id: string, placeholder: string, channel_types: number[]) => ({ type: 1, components: [{ type: 8, custom_id, placeholder, min_values: 1, max_values: 1, channel_types }] });
 const roleSelect = (custom_id: string, placeholder: string) => ({ type: 1, components: [{ type: 6, custom_id, placeholder, min_values: 0, max_values: 10 }] });
 const userSelect = (custom_id: string, placeholder: string) => ({ type: 1, components: [{ type: 5, custom_id, placeholder, min_values: 1, max_values: 5 }] });
+const stringSelect = (custom_id: string, placeholder: string, options: Array<{ label: string; value: string; description?: string }>) => ({ type: 1, components: [{ type: 3, custom_id, placeholder, min_values: 1, max_values: 1, options: options.slice(0, 25) }] });
 const configMenu = (cfg: GuildConfig) => [
   channelSelect("config:category_select", "Select ticket parent category", [4]),
   channelSelect("config:panel_channel_select", "Select panel destination channel", [0]),
@@ -194,7 +195,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       channelSelect("config:transcript_channel_select", "Select transcript destination", [0]),
       row(button("config:transcript_toggle", cfg.transcriptsEnabled ? "Disable Transcripts" : "Enable Transcripts", cfg.transcriptsEnabled ? 4 : 3), button("config:transcript_attachments_toggle", cfg.transcriptIncludeAttachments ? "Exclude Attachments" : "Include Attachments")),
     ]);
-    if (sub === "buttons") return response(`**Ticket Button Manager**\n${(cfg.buttons ?? []).map((b, n) => `${n + 1}. ${b.enabled ? "🟢" : "⚪"} ${b.emoji ?? ""} **${b.label}** — ${b.id}`).join("\n") || "No buttons configured."}\n\nAdd common ticket types, toggle them, delete them, or republish the panel.`, true, [row(button("buttons:add-custom", "➕ Add Custom Button", 1), button("buttons:add:general", "Add General"), button("buttons:add:billing", "Add Billing"), button("buttons:add:technical", "Add Technical")), ...(cfg.buttons ?? []).slice(0, 3).map((b, idx) => row(button(`buttons:edit:${b.id}`, `Edit ${b.label}`.slice(0, 80), 1), button(`buttons:up:${b.id}`, "↑", 2), button(`buttons:down:${b.id}`, "↓", 2), button(`buttons:toggle:${b.id}`, b.enabled ? "Disable" : "Enable", b.enabled ? 4 : 3), button(`buttons:delete:${b.id}`, "Delete", 4))), row(button("buttons:publish", "Publish / Update Panel", 1))]);
+    if (sub === "buttons") return response(`**Ticket Button Manager**\n${(cfg.buttons ?? []).map((b, n) => `${n + 1}. ${b.enabled ? "🟢" : "⚪"} ${b.emoji ?? ""} **${b.label}** — ${b.id}`).join("\n") || "No buttons configured."}\n\nAdd ticket types, select any type to edit/reorder/enable/delete it, then publish the panel.`, true, [row(button("buttons:add-custom", "➕ Add Custom", 1), button("buttons:add:general", "Add General"), button("buttons:add:billing", "Add Billing"), button("buttons:add:technical", "Add Technical")), ...((cfg.buttons ?? []).length ? [stringSelect("buttons:select", "Choose a ticket type to manage", (cfg.buttons ?? []).map((b) => ({ label: b.label, value: b.id, description: `${b.enabled ? "Enabled" : "Disabled"} · ${b.id}` })))] : []), row(button("buttons:publish", "Publish / Update Panel", 1))]);
     return response("Unknown /ticket subcommand.");
   }
   if (i.type === 5) {
@@ -347,6 +348,12 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       if (!isAdmin(i, cfg)) return response("Only ticket administrators can manage panel buttons.");
       const [, action, value] = customId.split(":");
       cfg.buttons ??= [];
+      if (action === "select") {
+        const selectedId = data.values?.[0];
+        const selected = cfg.buttons.find((b) => b.id === selectedId);
+        if (!selected) return response("Button not found.");
+        return updateResponse(`**${selected.emoji ?? "🔘"} ${selected.label}**\nStatus: ${selected.enabled ? "Enabled" : "Disabled"}\nChannel format: \`${selected.channelName}\``, [row(button(`buttons:edit:${selected.id}`, "Edit", 1), button(`buttons:up:${selected.id}`, "Move Up"), button(`buttons:down:${selected.id}`, "Move Down"), button(`buttons:toggle:${selected.id}`, selected.enabled ? "Disable" : "Enable", selected.enabled ? 4 : 3), button(`buttons:delete:${selected.id}`, "Delete", 4)), row(button("buttons:publish", "Publish / Update Panel", 1))]);
+      }
       if (action === "add") {
         if (cfg.buttons.length >= 125) return response("Relay supports up to 125 ticket types.");
         if (cfg.buttons.some((b) => b.id === value)) return response("That button type already exists.");
