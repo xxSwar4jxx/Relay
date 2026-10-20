@@ -19,6 +19,15 @@ const updateResponse = (content: string, components: unknown[] = []) => ({ type:
 const button = (custom_id: string, label: string, style = 2) => ({ type: 2, style, custom_id, label });
 const row = (...components: unknown[]) => ({ type: 1, components });
 const channelSelect = (custom_id: string, placeholder: string, channel_types: number[]) => ({ type: 1, components: [{ type: 8, custom_id, placeholder, min_values: 1, max_values: 1, channel_types }] });
+const roleSelect = (custom_id: string, placeholder: string) => ({ type: 1, components: [{ type: 6, custom_id, placeholder, min_values: 0, max_values: 10 }] });
+const configMenu = (cfg: GuildConfig) => [
+  channelSelect("config:category_select", "Select ticket parent category", [4]),
+  channelSelect("config:panel_channel_select", "Select panel destination channel", [0]),
+  channelSelect("config:log_channel_select", "Select logging channel", [0]),
+  roleSelect("config:admin_roles_select", "Select ticket admin roles"),
+  roleSelect("config:staff_roles_select", "Select support staff roles"),
+  row(button("config:panel_send", "Publish / Update Panel", 1), button("config:show_config", "Show Config")),
+];
 function isAdmin(i: Interaction, cfg: GuildConfig): boolean {
   let perms = 0n;
   try { perms = BigInt(i.member?.permissions ?? "0"); } catch { return false; }
@@ -114,13 +123,43 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       await writeJson(configPath(guildId), cfg);
       return response("Relay configuration reset. Existing ticket channels have not been deleted.");
     }
-    if (["buttons", "staff", "logs", "transcripts"].includes(sub ?? "")) return response("This settings page is not yet ported to the HTTP runtime. Use **/ticket setup** for the currently supported panel and category settings.");
+    if (sub === "staff" || sub === "buttons" || sub === "logs" || sub === "transcripts") {
+      const title = sub === "staff" ? "Staff Role Manager" : sub === "buttons" ? "Ticket Button Manager" : sub === "logs" ? "Logging Settings" : "Transcript Settings";
+      const hint = sub === "buttons"
+        ? "The HTTP runtime currently supports the default Open a Ticket panel button. Custom per-ticket-type button editing is not yet implemented."
+        : sub === "transcripts"
+        ? "Transcript export requires a separate storage/export flow; it is not yet implemented in this HTTP runtime."
+        : sub === "logs"
+        ? "Select a channel below to receive ticket lifecycle logs."
+        : "Select staff roles below. Staff can claim tickets and access ticket channels.";
+      return response(`**${title}**\n${hint}`, true, sub === "staff" ? [roleSelect("config:staff_roles_select", "Select support staff roles"), roleSelect("config:admin_roles_select", "Select ticket admin roles")] : sub === "logs" ? [channelSelect("config:log_channel_select", "Select logging channel", [0])] : []);
+    }
     return response("Unknown /ticket subcommand.");
   }
   if (i.type === 3) {
     const customId = data.custom_id ?? "";
     if (customId.startsWith("config:")) {
       if (!isAdmin(i, cfg)) return response("Only server administrators or configured ticket admins can change Relay settings.");
+      if (customId === "config:admin_roles_select" || customId === "config:staff_roles_select") {
+        const selected = data.values ?? [];
+        if (customId === "config:admin_roles_select") cfg.adminRoleIds = selected;
+        else cfg.staffRoleIds = selected;
+        await writeJson(configPath(guildId), cfg);
+        return updateResponse(customId === "config:admin_roles_select" ? `Ticket admin roles updated (${selected.length}).` : `Support staff roles updated (${selected.length}).`, [
+          roleSelect("config:admin_roles_select", "Select ticket admin roles"),
+          roleSelect("config:staff_roles_select", "Select support staff roles"),
+        ]);
+      }
+      if (customId === "config:log_channel_select") {
+        const selected = data.values?.[0];
+        if (!selected) return response("Select a logging channel.");
+        cfg.logChannelId = selected;
+        await writeJson(configPath(guildId), cfg);
+        return updateResponse(`Logging channel set to <#${selected}>.`);
+      }
+      if (customId === "config:show_config") {
+        return updateResponse(`**Relay Configuration**\n• Ticket category: ${cfg.categoryId ? `<#${cfg.categoryId}>` : "not configured"}\n• Panel channel: ${cfg.panelChannelId ? `<#${cfg.panelChannelId}>` : "not configured"}\n• Logging channel: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : "not configured"}\n• Admin roles: ${cfg.adminRoleIds.length}\n• Staff roles: ${cfg.staffRoleIds.length}\n• Open tickets: ${cfg.tickets.filter((t) => t.status === "open").length}`);
+      }
       if (customId === "config:category_select" || customId === "config:panel_channel_select") {
         const selected = data.values?.[0];
         if (!selected) return response("No channel selected.");
