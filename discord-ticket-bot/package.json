@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "deploy:commands": "tsx src/deploy-commands.ts"
+    "deploy:commands": "tsx src/deploy-commands.ts",
+    "test": "tsx --test src/runtime/*.test.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
