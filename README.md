@@ -188,5 +188,5 @@ This project is licensed under the [MIT License](LICENSE).
 ## Links
 
 - **GitHub:** [https://github.com/xxSwar4jxx/Relay](https://github.com/xxSwar4jxx/Relay)
-- **OpenForge:** [https://swar4j.space](https://swar4j.space)
+- **ZeroTech:** [https://swar4j.space](https://swar4j.space)
 - **Invite:** [Add Relay](https://discord.com/oauth2/authorize?client_id=1539725899253940396&permissions=5629878028397568&integration_type=0&scope=applications.commands+bot)
