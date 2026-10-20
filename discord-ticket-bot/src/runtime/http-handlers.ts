@@ -178,7 +178,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
     const style = Number(fields.get("style"));
     if ([1, 2, 3, 4].includes(style)) target.style = style;
     await writeJson(configPath(guildId), cfg);
-    return response(`Updated "${target.label}". Use /ticket buttons to republish the panel.`);
+    return response(`Updated "${target.label}". Set its staff roles below, then use /ticket buttons to republish the panel.`, true, [roleSelect(`buttons:staff:${id}`, "Select staff roles for this ticket type")]);
   }
   if (i.type === 3) {
     const customId = data.custom_id ?? "";
@@ -251,7 +251,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       }
     }
     if (customId === "ticket:open" || customId.startsWith("ticket:open:")) return await openTicket(i, cfg, customId.split(":")[2] || "general");
-    if (customId.startsWith("buttons:edit:")) {
+    if (customId.startsWith("buttons:staff:")) {\n      if (!isAdmin(i, cfg)) return response("Only ticket administrators can configure ticket-type staff roles.");\n      const id = customId.split(":")[2]; const target = (cfg.buttons ?? []).find((b) => b.id === id);\n      if (!target) return response("Button not found.");\n      target.staffRoleIds = data.values ?? [];\n      await writeJson(configPath(guildId), cfg);\n      return updateResponse(`Staff roles saved for ${target.label} (${target.staffRoleIds.length} role(s)).`);\n    }\n    if (customId.startsWith("buttons:edit:")) {
       if (!isAdmin(i, cfg)) return response("Only ticket administrators can edit panel buttons.");
       const id = customId.split(":")[2];
       const target = (cfg.buttons ?? []).find((b) => b.id === id);
