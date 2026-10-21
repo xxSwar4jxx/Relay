@@ -13,7 +13,7 @@ type TicketButton = { id: string; label: string; emoji: string | null; style: nu
 type GuildConfig = { guildId: string; categoryId: string | null; panelChannelId: string | null; panelMessageId: string | null; logChannelId: string | null; transcriptChannelId: string | null; transcriptsEnabled: boolean; transcriptIncludeAttachments: boolean; adminRoleIds: string[]; staffRoleIds: string[]; buttons: TicketButton[]; tickets: TicketRecord[] };
 
 const configPath = (guildId: string) => `relay/guilds/${guildId}.json`;
-const defaults = (guildId: string): GuildConfig => ({ guildId, categoryId: null, panelChannelId: null, panelMessageId: null, logChannelId: null, transcriptChannelId: null, transcriptsEnabled: false, transcriptIncludeAttachments: true, adminRoleIds: [], staffRoleIds: [], buttons: [{ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true }], tickets: [] });
+const defaults = (guildId: string): GuildConfig => ({ guildId, categoryId: null, panelChannelId: null, panelMessageId: null, logChannelId: null, transcriptChannelId: null, transcriptsEnabled: false, transcriptIncludeAttachments: true, adminRoleIds: [], staffRoleIds: [], buttons: [{ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}-{ticket_number}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true }], tickets: [] });
 const userId = (i: Interaction) => i.member?.user?.id ?? i.user?.id ?? "";
 const username = (i: Interaction) => i.member?.user?.username ?? i.user?.username ?? "user";
 const response = (content: string, ephemeral = true, components: unknown[] = []) => ({ type: 4, data: { content, flags: ephemeral ? 64 : 0, components } });
@@ -138,7 +138,8 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
   const existing = cfg.tickets.find((t) => t.ownerId === uid && t.status === "open");
   if (existing) return response(`You already have an open ticket: <#${existing.channelId}>`);
   const safeName = username(i).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").slice(0, 70) || "user";
-  const channelName = ticketButton.channelName.replace(/\{username\}/g, safeName).replace(/\{user\}/g, uid).replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 90) || `ticket-${safeName}`;
+  const ticketNumber = Math.max(0, ...cfg.tickets.map((t) => { const match = (t.originalChannelName ?? "").match(/-(\d+)$/); return match ? Number(match[1]) : 0; })) + 1;
+  const channelName = `ticket-${safeName}-${ticketNumber}`.replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 100);
   const overwrites: Array<Record<string, unknown>> = [
     { id: guildId, type: 0, deny: "1024" },
     { id: uid, type: 1, allow: "68608" },
@@ -467,14 +468,31 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         await log(cfg, "Ticket Members Added", `${selected.map((id) => `<@${id}>`).join(", ")} added to <#${channelId}> by <@${uid}>.`);
         return response(`Added ${selected.length} member(s) to the ticket.`);
       }
+      if (action === "unclaim") {
+        if (!isStaff(i, cfg)) return response("Only configured support staff can unclaim tickets.");
+        if (ticket.claimedBy !== uid) return response("Only the staff member who claimed this ticket can unclaim it.");
+        ticket.claimedBy = null;
+        await writeJson(configPath(guildId), cfg);
+        if (i.message?.id && i.channel_id) {
+          await discordRequest(`/channels/${i.channel_id}/messages/${i.message.id}`, { method: "PATCH", body: JSON.stringify({
+            ...v2Text(`## 🎫 Ticket Controls\nThis ticket is currently unclaimed. A staff member can claim it when ready.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
+              v2Row(button(`ticket:claim:${channelId}`, "Claim Ticket", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4)),
+              userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"),
+              userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket"),
+            ]),
+          }) });
+        }
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`### Ticket Unclaimed\n<@${uid}> released this ticket back to the support team.`, [], 5793266), allowed_mentions: { parse: [], users: [uid] } }) });
+        await log(cfg, "Ticket Unclaimed", `Ticket <#${channelId}> unclaimed by <@${uid}>.`);
+        return response("Ticket unclaimed.");
+      }
       if (action === "claim") {
         if (!isStaff(i, cfg)) return response("Only configured support staff can claim tickets.");
         if (ticket.claimedBy && ticket.claimedBy !== uid) return response(`This ticket is already claimed by <@${ticket.claimedBy}>.`);
         if (ticket.claimedBy === uid) return response("You have already claimed this ticket.");
         ticket.claimedBy = uid;
         await writeJson(configPath(guildId), cfg);
-        const claimedLabel = button(`ticket:claim:${channelId}`, "Claimed", 2);
-        (claimedLabel as { disabled?: boolean }).disabled = true;
+        const claimedLabel = button(`ticket:unclaim:${channelId}`, "Unclaim Ticket", 2);
         if (i.message?.id && i.channel_id) {
           const currentContent = i.message.content ?? "";
           const suffix = `\n\nClaimed by ${username(i)}`;
