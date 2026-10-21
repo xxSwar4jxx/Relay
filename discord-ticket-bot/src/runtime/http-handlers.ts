@@ -39,6 +39,20 @@ function isAdmin(i: Interaction, cfg: GuildConfig): boolean {
 }
 const isStaff = (i: Interaction, cfg: GuildConfig) => isAdmin(i, cfg) || (i.member?.roles ?? []).some((r) => cfg.staffRoleIds.includes(r));
 const embed = (title: string, description: string, color = 5793266) => ({ title, description, color, footer: { text: "" } });
+const v2Text = (content: string, rows: unknown[] = [], accent_color = 5793266) => ({
+  flags: 32768,
+  components: [{
+    type: 17,
+    accent_color,
+    components: [
+      { type: 10, content },
+      ...rows,
+    ],
+  }],
+  allowed_mentions: { parse: [] },
+});
+const v2Row = (...components: unknown[]) => ({ type: 1, components });
+
 function panelPayload(cfg: GuildConfig) {
   const active = (cfg.buttons ?? []).filter((b) => b.enabled).slice(0, 125);
   const components: Array<Record<string, unknown>> = [
@@ -58,7 +72,7 @@ function panelPayload(cfg: GuildConfig) {
 }
 async function log(cfg: GuildConfig, title: string, description: string) {
   if (!cfg.logChannelId) return;
-  await discordRequest(`/channels/${cfg.logChannelId}/messages`, { method: "POST", body: JSON.stringify({ embeds: [embed(title, description)], allowed_mentions: { parse: [] } }) }).catch((err) => console.error("[relay log]", err));
+  await discordRequest(`/channels/${cfg.logChannelId}/messages`, { method: "POST", body: JSON.stringify(v2Text(`### ${title}\n${description}`, [], 5793266)) }).catch((err) => console.error("[relay log]", err));
 }
 type DiscordMessage = { id: string; author?: { id?: string; username?: string; global_name?: string; bot?: boolean }; content?: string; timestamp?: string; attachments?: Array<{ url: string; filename: string }>; embeds?: Array<{ title?: string; description?: string }>  };
 async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: string): Promise<void> {
@@ -137,9 +151,11 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
     await discordRequest(`/channels/${created.id}/messages`, {
       method: "POST",
       body: JSON.stringify({
-        content: `<@${uid}> ${ticketButton.openingMessage || "Thanks for contacting support! Please describe your issue below."}\n\nStaff can claim this ticket or close it when resolved.`,
-        embeds: [embed("Ticket Controls", "Use the controls below. Claiming is limited to configured staff.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>")],
-        components: [row(button(`ticket:claim:${created.id}`, "Claim", 3), button(`ticket:close:${created.id}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${created.id}`, "Add members to this ticket"), userSelect(`ticket:removemember:${created.id}`, "Remove members from this ticket")],
+        ...v2Text(`## 🎫 ${ticketButton.label}\n<@${uid}> ${ticketButton.openingMessage || "Thanks for contacting support! Please describe your issue below."}\n\n> 🔒 Private support channel\n> Staff can claim this ticket or close it when resolved.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
+          v2Row(button(`ticket:claim:${created.id}`, "Claim Ticket", 3), button(`ticket:close:${created.id}`, "Close Ticket", 4)),
+          userSelect(`ticket:addmember:${created.id}`, "Add members to this ticket"),
+          userSelect(`ticket:removemember:${created.id}`, "Remove members from this ticket"),
+        ], 5793266),
         allowed_mentions: { parse: [], users: [uid] },
       }),
     });
@@ -418,7 +434,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         const current = await discordRequest<{ permission_overwrites?: Array<{ id: string; type: number; allow?: string; deny?: string }> }>(`/channels/${channelId}`);
         const overwrites = (current.permission_overwrites ?? []).filter((o) => !(o.type === 1 && selected.includes(o.id)));
         await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ permission_overwrites: overwrites }) });
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Removed from ticket: ${selected.map((id) => `<@${id}>`).join(", ")}.`, allowed_mentions: { parse: [], users: selected } }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`### 👤 Members Removed\nRemoved from this ticket: ${selected.map((id) => `<@${id}>`).join(", ")}.`, [], 15548997), allowed_mentions: { parse: [], users: selected } }) });
         await log(cfg, "Ticket Members Removed", `${selected.map((id) => `<@${id}>`).join(", ")} removed from <#${channelId}> by <@${uid}>.`);
         return response(`Removed ${selected.length} member(s) from the ticket.`);
       }
@@ -430,7 +446,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         const overwrites = (current.permission_overwrites ?? []).filter((o) => !selected.includes(o.id));
         for (const memberId of selected) overwrites.push({ id: memberId, type: 1, allow: "3072" });
         await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ permission_overwrites: overwrites }) });
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Added to ticket: ${selected.map((id) => `<@${id}>`).join(", ")}.`, allowed_mentions: { parse: [], users: selected } }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`### 👤 Members Added\nAdded to this ticket: ${selected.map((id) => `<@${id}>`).join(", ")}.`, [], 5763719), allowed_mentions: { parse: [], users: selected } }) });
         await log(cfg, "Ticket Members Added", `${selected.map((id) => `<@${id}>`).join(", ")} added to <#${channelId}> by <@${uid}>.`);
         return response(`Added ${selected.length} member(s) to the ticket.`);
       }
@@ -445,9 +461,16 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         if (i.message?.id && i.channel_id) {
           const currentContent = i.message.content ?? "";
           const suffix = `\n\nClaimed by ${username(i)}`;
-          await discordRequest(`/channels/${i.channel_id}/messages/${i.message.id}`, { method: "PATCH", body: JSON.stringify({ content: currentContent.includes("Claimed by ") ? currentContent.replace(/\n\nClaimed by .*/, suffix) : currentContent + suffix, components: [row(claimedLabel, button(`ticket:close:${channelId}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"), userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket")] }) });
+          await discordRequest(`/channels/${i.channel_id}/messages/${i.message.id}`, { method: "PATCH", body: JSON.stringify({
+            ...v2Text(`## 🎫 Ticket Controls\n${currentContent.replace(/\n\nClaimed by .*/, "").replace(/^.*?Thanks for contacting support!/, "Thanks for contacting support!")}\n\n> 🟢 Claimed by <@${uid}>\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
+              v2Row(claimedLabel, button(`ticket:close:${channelId}`, "Close Ticket", 4)),
+              userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"),
+              userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket"),
+            ]),
+            allowed_mentions: { parse: [], users: [uid] },
+          }) });
         }
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Claimed by ${username(i)} (<@${uid}>).`, allowed_mentions: { parse: [], users: [uid] } }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`### 🟢 Ticket Claimed\n<@${uid}> (${username(i)}) is handling this ticket.`, [], 5763719), allowed_mentions: { parse: [], users: [uid] } }) });
         await log(cfg, "Ticket Claimed", `Ticket <#${channelId}> claimed by <@${uid}>.`);
         return response("Ticket claimed.");
       }
@@ -465,7 +488,11 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         const reopenOverwrites = [{ id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, allow: "3072" }, ...[...new Set([...cfg.staffRoleIds, ...cfg.adminRoleIds])].map((id) => ({ id, type: 0, allow: "3072" }))];
         await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: ticket.originalChannelName ?? `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: reopenOverwrites }) });
         await writeJson(configPath(guildId), cfg);
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket reopened by <@${uid}>.`, components: [row(button(`ticket:claim:${channelId}`, "Claim", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"), userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket")], allowed_mentions: { parse: [], users: [uid] } }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`## 🔓 Ticket Reopened\nReopened by <@${uid}>. The conversation can continue below.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
+          v2Row(button(`ticket:claim:${channelId}`, "Claim Ticket", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4)),
+          userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"),
+          userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket"),
+        ], 5763719), allowed_mentions: { parse: [], users: [uid] } }) });
         await log(cfg, "Ticket Reopened", `Ticket <#${channelId}> reopened by <@${uid}>.`);
         return response("Ticket reopened.");
       }
@@ -474,7 +501,9 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         await deliverTranscript(cfg, channelId, ticket.ownerId).catch((err) => console.error("[relay transcript]", err));
         ticket.status = "closed";
         await writeJson(configPath(guildId), cfg);
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket closed by <@${uid}>.`, components: [row(button(`ticket:reopen:${channelId}`, "Reopen Ticket", 3), button(`ticket:delete:${channelId}`, "Delete Channel", 4))], allowed_mentions: { parse: [], users: [uid] } }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`## 🔒 Ticket Closed\nClosed by <@${uid}>. This ticket is now read-only for the ticket creator.\n\nYou can reopen it if more help is needed, or delete the channel when finished.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
+          v2Row(button(`ticket:reopen:${channelId}`, "Reopen Ticket", 3), button(`ticket:delete:${channelId}`, "Delete Channel", 4)),
+        ], 15548997), allowed_mentions: { parse: [], users: [uid] } }) });
         await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: ticket.originalChannelName ?? `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: [
           { id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, deny: "2048" },
           ...cfg.staffRoleIds.map((id) => ({ id, type: 0, allow: "3072" })),
