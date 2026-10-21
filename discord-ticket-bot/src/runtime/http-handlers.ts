@@ -38,10 +38,10 @@ function isAdmin(i: Interaction, cfg: GuildConfig): boolean {
   return (perms & 0x8n) !== 0n || (perms & 0x20n) !== 0n || (i.member?.roles ?? []).some((r) => cfg.adminRoleIds.includes(r));
 }
 const isStaff = (i: Interaction, cfg: GuildConfig) => isAdmin(i, cfg) || (i.member?.roles ?? []).some((r) => cfg.staffRoleIds.includes(r));
-const embed = (title: string, description: string, color = 5793266) => ({ title, description, color, footer: { text: "<:zerotech_logo:1560034505052528731> • <:nispax_old:1435320966673600602>" } });
+const embed = (title: string, description: string, color = 5793266) => ({ title, description, color, footer: { text: "" } });
 function panelPayload(cfg: GuildConfig) {
   const active = (cfg.buttons ?? []).filter((b) => b.enabled).slice(0, 125);
-  const embeds = [embed("🎫 Support Tickets", "Need help? Choose the option that best matches your issue and our team will assist you.\\n\\nYour ticket will be private to you and the support team.")];
+  const embeds = [embed("🎫 Support Tickets", "Need help? Choose the option that best matches your issue and our team will assist you.\n\nYour ticket will be private to you and the support team.\n\n<:zerotech_logo:1560034505052528731> • <:nispax_old:1435320966673600602>")];
   const components: Array<Record<string, unknown>> = [];
   if (active.length === 0) active.push({ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true });
   if (active.length <= 25) {
@@ -137,7 +137,7 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
       method: "POST",
       body: JSON.stringify({
         content: `<@${uid}> ${ticketButton.openingMessage || "Thanks for contacting support! Please describe your issue below."}\n\nStaff can claim this ticket or close it when resolved.`,
-        embeds: [embed("Ticket Controls", "Use the controls below. Claiming is limited to configured staff.")],
+        embeds: [embed("Ticket Controls", "Use the controls below. Claiming is limited to configured staff.\n\n<:zerotech_logo:1560034505052528731> • <:nispax_old:1435320966673600602>")],
         components: [row(button(`ticket:claim:${created.id}`, "Claim", 3), button(`ticket:close:${created.id}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${created.id}`, "Add members to this ticket"), userSelect(`ticket:removemember:${created.id}`, "Remove members from this ticket")],
         allowed_mentions: { parse: [], users: [uid] },
       }),
@@ -191,9 +191,9 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       await writeJson(configPath(guildId), cfg);
       return response("Relay configuration reset. Existing ticket channels have not been deleted.");
     }
-    if (sub === "staff") return response("**Staff Role Manager**\\nSelect global staff roles. Staff can claim tickets and access ticket channels.", true, [roleSelect("config:staff_roles_select", "Select support staff roles"), roleSelect("config:admin_roles_select", "Select ticket admin roles")]);
-    if (sub === "logs") return response("**Logging Settings**\\nSelect a channel for ticket lifecycle logs.", true, [channelSelect("config:log_channel_select", "Select logging channel", [0])]);
-    if (sub === "transcripts") return response(`**Transcript Settings**\\n• Enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\\n• Destination: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not set"}\\n• Include attachments: ${cfg.transcriptIncludeAttachments ? "yes" : "no"}\\n\\nWhen enabled, Relay captures the latest 100 messages on ticket close and sends them to the selected channel.`, true, [
+    if (sub === "staff") return response("**Staff Role Manager**\nSelect global staff roles. Staff can claim tickets and access ticket channels.", true, [roleSelect("config:staff_roles_select", "Select support staff roles"), roleSelect("config:admin_roles_select", "Select ticket admin roles")]);
+    if (sub === "logs") return response("**Logging Settings**\nSelect a channel for ticket lifecycle logs.", true, [channelSelect("config:log_channel_select", "Select logging channel", [0])]);
+    if (sub === "transcripts") return response(`**Transcript Settings**\n• Enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\n• Destination: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not set"}\n• Include attachments: ${cfg.transcriptIncludeAttachments ? "yes" : "no"}\n\nWhen enabled, Relay captures the latest 100 messages on ticket close and sends them to the selected channel.`, true, [
       channelSelect("config:transcript_channel_select", "Select transcript destination", [0]),
       row(button("config:transcript_toggle", cfg.transcriptsEnabled ? "Disable Transcripts" : "Enable Transcripts", cfg.transcriptsEnabled ? 4 : 3), button("config:transcript_attachments_toggle", cfg.transcriptIncludeAttachments ? "Exclude Attachments" : "Include Attachments")),
     ]);
@@ -382,7 +382,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       const [, action, channelId] = customId.split(":");
       const ticket = cfg.tickets.find((t) => t.channelId === channelId);
       if (!ticket) return response("This ticket is not tracked by Relay.");
-      if (ticket.status !== "open" && action !== "reopen") return response("This ticket is closed. Reopen it before using ticket controls.");
+      if (ticket.status !== "open" && action !== "reopen" && action !== "delete") return response("This ticket is closed. Reopen it before using ticket controls.");
       const uid = userId(i);
       if (action === "removemember") {
         if (!isStaff(i, cfg)) return response("Only configured support staff can remove ticket members.");
@@ -418,8 +418,8 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         (claimedLabel as { disabled?: boolean }).disabled = true;
         if (i.message?.id && i.channel_id) {
           const currentContent = i.message.content ?? "";
-          const suffix = `\\n\\nClaimed by ${username(i)}`;
-          await discordRequest(`/channels/${i.channel_id}/messages/${i.message.id}`, { method: "PATCH", body: JSON.stringify({ content: currentContent.includes("Claimed by ") ? currentContent.replace(/\\n\\nClaimed by .*/, suffix) : currentContent + suffix, components: [row(claimedLabel, button(`ticket:close:${channelId}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"), userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket")] }) });
+          const suffix = `\n\nClaimed by ${username(i)}`;
+          await discordRequest(`/channels/${i.channel_id}/messages/${i.message.id}`, { method: "PATCH", body: JSON.stringify({ content: currentContent.includes("Claimed by ") ? currentContent.replace(/\n\nClaimed by .*/, suffix) : currentContent + suffix, components: [row(claimedLabel, button(`ticket:close:${channelId}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"), userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket")] }) });
         }
         await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Claimed by ${username(i)} (<@${uid}>).`, allowed_mentions: { parse: [], users: [uid] } }) });
         await log(cfg, "Ticket Claimed", `Ticket <#${channelId}> claimed by <@${uid}>.`);
