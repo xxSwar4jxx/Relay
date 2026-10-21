@@ -93,7 +93,7 @@ async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: s
     return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().replace("T", " ").replace("Z", " UTC");
   };
   const lines = [
-    "RELAY SUPPORT TICKET TRANSCRIPT",
+    "WINDY SUPPORT TICKET TRANSCRIPT",
     "=".repeat(72),
     `Ticket channel: #${channelId}`,
     `Ticket owner: ${ownerId}`,
@@ -120,7 +120,7 @@ async function deliverTranscript(cfg: GuildConfig, channelId: string, ownerId: s
     lines.push("");
   }
   const textContent = lines.join("\n").replace(/\n{4,}/g, "\n\n\n");
-  const filename = `relay-transcript-${channelId}-${new Date().toISOString().slice(0, 10)}.txt`;
+  const filename = `windy-transcript-${channelId}-${new Date().toISOString().slice(0, 10)}.txt`;
   const form = new FormData();
   form.append("payload_json", JSON.stringify({
     content: `📄 **Ticket transcript** — <#${channelId}> (owner <@${ownerId}>)`,
@@ -152,7 +152,7 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
   for (const roleId of cfg.adminRoleIds) overwrites.push({ id: roleId, type: 0, allow: "3072" });
   const created = await discordRequest<{ id: string; name: string }>(`/guilds/${guildId}/channels`, {
     method: "POST",
-    body: JSON.stringify({ name: channelName.slice(0, 100), type: 0, ...(cfg.categoryId ? { parent_id: cfg.categoryId } : {}), topic: `Relay ticket • owner:${uid}`, permission_overwrites: overwrites }),
+    body: JSON.stringify({ name: channelName.slice(0, 100), type: 0, ...(cfg.categoryId ? { parent_id: cfg.categoryId } : {}), topic: `Windy ticket • owner:${uid}`, permission_overwrites: overwrites }),
   });
   const ticket: TicketRecord = { channelId: created.id, ownerId: uid, claimedBy: null, status: "open", createdAt: new Date().toISOString(), originalChannelName: created.name };
   cfg.tickets.push(ticket);
@@ -192,20 +192,20 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
 export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
   if (i.type === 1) return { type: 1 };
   const guildId = i.guild_id;
-  if (!guildId) return response("Relay commands can only be used inside a server.");
+  if (!guildId) return response("Windy commands can only be used inside a server.");
   const cfg = await readJson<GuildConfig>(configPath(guildId), defaults(guildId));
   const data = i.data ?? {};
   if (i.type === 2 && data.name === "ticket") {
     const subcommand = data.options?.[0];
     const sub = subcommand?.name;
     const options = subcommand?.options ?? [];
-    if (!isAdmin(i, cfg)) return response("Only server administrators or configured ticket admins can configure Relay.");
-    if (sub === "setup") return response("**Relay Setup**\nChoose the parent category for new tickets, then choose where the public ticket panel should be posted. You can rerun `/ticket setup` any time.", true, [
+    if (!isAdmin(i, cfg)) return response("Only server administrators or configured ticket admins can configure Windy.");
+    if (sub === "setup") return response("**Windy Setup**\nChoose the parent category for new tickets, then choose where the public ticket panel should be posted. You can rerun `/ticket setup` any time.", true, [
       channelSelect("config:category_select", "Select ticket parent category", [4]),
       channelSelect("config:panel_channel_select", "Select panel destination channel", [0]),
       row(button("config:panel_send", "Publish / Update Panel", 1)),
     ]);
-    if (sub === "config") return response(`**Relay Configuration**\n• Ticket category: ${cfg.categoryId ? `<#${cfg.categoryId}>` : "not configured"}\n• Panel channel: ${cfg.panelChannelId ? `<#${cfg.panelChannelId}>` : "not configured"}\n• Logging channel: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : "not configured"}\n• Transcript channel: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not configured"}\n• Transcripts enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\n• Admin roles: ${cfg.adminRoleIds.length}\n• Staff roles: ${cfg.staffRoleIds.length}\n• Open tickets tracked: ${cfg.tickets.filter((t) => t.status === "open").length}`);
+    if (sub === "config") return response(`**Windy Configuration**\n• Ticket category: ${cfg.categoryId ? `<#${cfg.categoryId}>` : "not configured"}\n• Panel channel: ${cfg.panelChannelId ? `<#${cfg.panelChannelId}>` : "not configured"}\n• Logging channel: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : "not configured"}\n• Transcript channel: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not configured"}\n• Transcripts enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\n• Admin roles: ${cfg.adminRoleIds.length}\n• Staff roles: ${cfg.staffRoleIds.length}\n• Open tickets tracked: ${cfg.tickets.filter((t) => t.status === "open").length}`);
     if (sub === "panel") {
       const action = options.find((o) => o.name === "action")?.value;
       if (action === "preview") return { type: 4, data: { ...panelPayload(cfg), flags: 32768 | 64 } };
@@ -226,7 +226,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         try {
           await discordRequest(`/channels/${channelId}/pins/${messageId}`, { method: "PUT" });
         } catch (error) {
-          pinNotice = " The panel was published, but I couldn't pin it; check that Relay has Manage Messages permission in that channel.";
+          pinNotice = " The panel was published, but I couldn't pin it; check that Windy has Manage Messages permission in that channel.";
           console.error("[relay panel pin]", { guildId, channelId, messageId, error: error instanceof Error ? error.message : String(error) });
         }
       }
@@ -235,11 +235,11 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
     if (sub === "reset") {
       cfg.categoryId = null; cfg.panelChannelId = null; cfg.panelMessageId = null; cfg.logChannelId = null; cfg.transcriptChannelId = null; cfg.transcriptsEnabled = false; cfg.transcriptIncludeAttachments = true; cfg.adminRoleIds = []; cfg.staffRoleIds = []; cfg.buttons = [{ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true }];
       await writeJson(configPath(guildId), cfg);
-      return response("Relay configuration reset. Existing ticket channels have not been deleted.");
+      return response("Windy configuration reset. Existing ticket channels have not been deleted.");
     }
     if (sub === "staff") return response("**Staff Role Manager**\nSelect global staff roles. Staff can claim tickets and access ticket channels.", true, [roleSelect("config:staff_roles_select", "Select support staff roles"), roleSelect("config:admin_roles_select", "Select ticket admin roles")]);
     if (sub === "logs") return response("**Logging Settings**\nSelect a channel for ticket lifecycle logs.", true, [channelSelect("config:log_channel_select", "Select logging channel", [0])]);
-    if (sub === "transcripts") return response(`**Transcript Settings**\n• Enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\n• Destination: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not set"}\n• Include attachments: ${cfg.transcriptIncludeAttachments ? "yes" : "no"}\n\nWhen enabled, Relay captures the latest 100 messages on ticket close and sends them to the selected channel.`, true, [
+    if (sub === "transcripts") return response(`**Transcript Settings**\n• Enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\n• Destination: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not set"}\n• Include attachments: ${cfg.transcriptIncludeAttachments ? "yes" : "no"}\n\nWhen enabled, Windy captures the latest 100 messages on ticket close and sends them to the selected channel.`, true, [
       channelSelect("config:transcript_channel_select", "Select transcript destination", [0]),
       row(button("config:transcript_toggle", cfg.transcriptsEnabled ? "Disable Transcripts" : "Enable Transcripts", cfg.transcriptsEnabled ? 4 : 3), button("config:transcript_attachments_toggle", cfg.transcriptIncludeAttachments ? "Exclude Attachments" : "Include Attachments")),
     ]);
@@ -253,7 +253,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       const fields = new Map((data.components ?? []).flatMap((r) => r.components ?? []).map((c) => [c.custom_id ?? "", c.value ?? ""]));
       const label = (fields.get("label") ?? "").trim().slice(0, 80);
       if (!label) return response("Button label cannot be empty.");
-      if ((cfg.buttons ?? []).length >= 125) return response("Relay supports up to 125 ticket types on a panel.");
+      if ((cfg.buttons ?? []).length >= 125) return response("Windy supports up to 125 ticket types on a panel.");
       const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 35) || `type-${Date.now()}`;
       if ((cfg.buttons ?? []).some((b) => b.id === id)) return response("A button with a similar name already exists. Choose a different label.");
       const styleValue = Number(fields.get("style") ?? "1");
@@ -261,8 +261,8 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       await writeJson(configPath(guildId), cfg);
       return response(`Added ticket type **${label}**. Use /ticket buttons to publish the updated panel.`);
     }
-    if (!customId.startsWith("buttons:edit-submit:")) return response("Unknown Relay form.");
-    if (!customId.startsWith("buttons:edit-submit:")) return response("Unknown Relay form.");
+    if (!customId.startsWith("buttons:edit-submit:")) return response("Unknown Windy form.");
+    if (!customId.startsWith("buttons:edit-submit:")) return response("Unknown Windy form.");
     if (!isAdmin(i, cfg)) return response("Only ticket administrators can edit panel buttons.");
     const id = customId.split(":")[2];
     const target = (cfg.buttons ?? []).find((b) => b.id === id);
@@ -281,7 +281,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
   if (i.type === 3) {
     const customId = data.custom_id ?? "";
     if (customId.startsWith("config:")) {
-      if (!isAdmin(i, cfg)) return response("Only server administrators or configured ticket admins can change Relay settings.");
+      if (!isAdmin(i, cfg)) return response("Only server administrators or configured ticket admins can change Windy settings.");
       if (customId === "config:admin_roles_select" || customId === "config:staff_roles_select") {
         const selected = data.values ?? [];
         if (customId === "config:admin_roles_select") cfg.adminRoleIds = selected;
@@ -320,7 +320,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         return updateResponse(`Transcript attachment preference saved: ${cfg.transcriptIncludeAttachments ? "included" : "excluded"}. Export is not active yet.`);
       }
       if (customId === "config:show_config") {
-        return updateResponse(`**Relay Configuration**\n• Ticket category: ${cfg.categoryId ? `<#${cfg.categoryId}>` : "not configured"}\n• Panel channel: ${cfg.panelChannelId ? `<#${cfg.panelChannelId}>` : "not configured"}\n• Logging channel: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : "not configured"}\n• Admin roles: ${cfg.adminRoleIds.length}\n• Staff roles: ${cfg.staffRoleIds.length}\n• Open tickets: ${cfg.tickets.filter((t) => t.status === "open").length}`);
+        return updateResponse(`**Windy Configuration**\n• Ticket category: ${cfg.categoryId ? `<#${cfg.categoryId}>` : "not configured"}\n• Panel channel: ${cfg.panelChannelId ? `<#${cfg.panelChannelId}>` : "not configured"}\n• Logging channel: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : "not configured"}\n• Admin roles: ${cfg.adminRoleIds.length}\n• Staff roles: ${cfg.staffRoleIds.length}\n• Open tickets: ${cfg.tickets.filter((t) => t.status === "open").length}`);
       }
       if (customId === "config:category_select" || customId === "config:panel_channel_select") {
         const selected = data.values?.[0];
@@ -350,7 +350,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
           try {
             await discordRequest(`/channels/${cfg.panelChannelId}/pins/${messageId}`, { method: "PUT" });
           } catch (error) {
-            pinNotice = " The panel was published, but I couldn't pin it; check that Relay has Manage Messages permission in that channel.";
+            pinNotice = " The panel was published, but I couldn't pin it; check that Windy has Manage Messages permission in that channel.";
             console.error("[relay panel pin]", { guildId, channelId: cfg.panelChannelId, messageId, error: error instanceof Error ? error.message : String(error) });
           }
         }
@@ -412,7 +412,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         return updateResponse(`**${selected.emoji ?? "🔘"} ${selected.label}**\nStatus: ${selected.enabled ? "Enabled" : "Disabled"}\nChannel format: \`${selected.channelName}\``, [row(button(`buttons:edit:${selected.id}`, "Edit", 1), button(`buttons:up:${selected.id}`, "Move Up"), button(`buttons:down:${selected.id}`, "Move Down"), button(`buttons:toggle:${selected.id}`, selected.enabled ? "Disable" : "Enable", selected.enabled ? 4 : 3), button(`buttons:delete:${selected.id}`, "Delete", 4)), row(button("buttons:publish", "Publish / Update Panel", 1))]);
       }
       if (action === "add") {
-        if (cfg.buttons.length >= 125) return response("Relay supports up to 125 ticket types.");
+        if (cfg.buttons.length >= 125) return response("Windy supports up to 125 ticket types.");
         if (cfg.buttons.some((b) => b.id === value)) return response("That button type already exists.");
         const presets: Record<string, Omit<TicketButton, "enabled">> = {
           general: { id: "general", label: "General Support", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [] },
@@ -443,7 +443,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
     if (customId.startsWith("ticket:")) {
       const [, action, channelId] = customId.split(":");
       const ticket = cfg.tickets.find((t) => t.channelId === channelId);
-      if (!ticket) return response("This ticket is not tracked by Relay.");
+      if (!ticket) return response("This ticket is not tracked by Windy.");
       if (ticket.status !== "open" && action !== "reopen" && action !== "delete") return response("This ticket is closed. Reopen it before using ticket controls.");
       const uid = userId(i);
       if (action === "removemember") {
@@ -550,7 +550,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         return response("Ticket closed.");
       }
     }
-    return response("Unknown Relay component.");
+    return response("Unknown Windy component.");
   }
-  return response("Unsupported Relay interaction.");
+  return response("Unsupported Windy interaction.");
 }
