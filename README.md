@@ -1,6 +1,6 @@
-# Relay
+# Windy
 
-**Relay** is a production-ready Discord ticket bot.  
+**Windy** is a production-ready Discord ticket bot.  
 Everything is configured **inside Discord** — slash commands, buttons, select menus, and modals. No external dashboard required.
 
 **Version:** 2.0  
@@ -189,4 +189,4 @@ This project is licensed under the [MIT License](LICENSE).
 
 - **GitHub:** [https://github.com/xxSwar4jxx/Relay](https://github.com/xxSwar4jxx/Relay)
 - **ZeroTech:** [https://swar4j.space](https://swar4j.space)
-- **Invite:** [Add Relay](https://discord.com/oauth2/authorize?client_id=1539725899253940396&permissions=5629878028397568&integration_type=0&scope=applications.commands+bot)
+- **Invite:** [Add Windy](https://discord.com/oauth2/authorize?client_id=1539725899253940396&permissions=5629878028397568&integration_type=0&scope=applications.commands+bot)
