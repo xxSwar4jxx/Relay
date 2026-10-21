@@ -3,6 +3,7 @@ import { readJson, writeJson } from "./storage";
 
 type Interaction = {
   type: number; id: string; token: string; guild_id?: string; channel_id?: string;
+  message?: { id?: string; content?: string };
   member?: { user?: { id: string; username?: string }; roles?: string[]; permissions?: string };
   user?: { id: string; username?: string };
   data?: { name?: string; options?: Array<{ name: string; value?: string | number; options?: Array<{ name: string; value?: string | number }> }>; custom_id?: string; values?: string[]; components?: Array<{ components?: Array<{ custom_id?: string; value?: string }> }> };
