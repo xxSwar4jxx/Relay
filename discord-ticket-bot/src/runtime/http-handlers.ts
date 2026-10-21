@@ -148,7 +148,7 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
   cfg.tickets.push(ticket);
   try {
     await writeJson(configPath(guildId), cfg);
-    await discordRequest(`/channels/${created.id}/messages`, {
+    const ticketPanel = await discordRequest<{ id: string }>(`/channels/${created.id}/messages`, {
       method: "POST",
       body: JSON.stringify({
         ...v2Text(`## 🎫 ${ticketButton.label}\n<@${uid}> ${ticketButton.openingMessage || "Thanks for contacting support! Please describe your issue below."}\n\n> 🔒 Private support channel\n> Staff can claim this ticket or close it when resolved.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
@@ -159,6 +159,16 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
         allowed_mentions: { parse: [], users: [uid] },
       }),
     });
+    try {
+      await discordRequest(`/channels/${created.id}/pins/${ticketPanel.id}`, { method: "PUT" });
+    } catch (pinError) {
+      console.error("[relay ticket panel pin]", {
+        guildId,
+        channelId: created.id,
+        messageId: ticketPanel.id,
+        error: pinError instanceof Error ? pinError.message : String(pinError),
+      });
+    }
   } catch (error) {
     cfg.tickets = cfg.tickets.filter((t) => t.channelId !== created.id);
     await writeJson(configPath(guildId), cfg).catch((rollbackError) => console.error("[relay ticket rollback]", rollbackError));
