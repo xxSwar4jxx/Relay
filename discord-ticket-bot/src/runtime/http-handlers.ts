@@ -137,8 +137,10 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
   if (!uid) return response("I couldn't identify your Discord account.");
   const existing = cfg.tickets.find((t) => t.ownerId === uid && t.status === "open");
   if (existing) return response(`You already have an open ticket: <#${existing.channelId}>`);
-  const safeName = username(i).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").slice(0, 70) || "user";
-  const ticketNumber = Math.max(0, ...cfg.tickets.map((t) => { const match = (t.originalChannelName ?? "").match(/-(\d+)$/); return match ? Number(match[1]) : 0; })) + 1;
+  // Keep Discord username underscores intact. Do not infer ticket numbers from channel-name suffixes:
+  // usernames can themselves end in digits (e.g. "nishit_2009").
+  const safeName = username(i).toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^[-_]+|[-_]+$/g, "").slice(0, 70) || "user";
+  const ticketNumber = cfg.tickets.length + 1;
   const channelName = `ticket-${safeName}-${ticketNumber}`.replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 100);
   const overwrites: Array<Record<string, unknown>> = [
     { id: guildId, type: 0, deny: "1024" },
