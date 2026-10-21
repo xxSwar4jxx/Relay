@@ -7,7 +7,7 @@ type Interaction = {
   user?: { id: string; username?: string };
   data?: { name?: string; options?: Array<{ name: string; value?: string | number; options?: Array<{ name: string; value?: string | number }> }>; custom_id?: string; values?: string[]; components?: Array<{ components?: Array<{ custom_id?: string; value?: string }> }> };
 };
-type TicketRecord = { channelId: string; ownerId: string; claimedBy: string | null; status: "open" | "closed"; createdAt: string };
+type TicketRecord = { channelId: string; ownerId: string; claimedBy: string | null; status: "open" | "closed"; createdAt: string; originalChannelName?: string };
 type TicketButton = { id: string; label: string; emoji: string | null; style: number; channelName: string; openingMessage: string; staffRoleIds: string[]; enabled: boolean };
 type GuildConfig = { guildId: string; categoryId: string | null; panelChannelId: string | null; panelMessageId: string | null; logChannelId: string | null; transcriptChannelId: string | null; transcriptsEnabled: boolean; transcriptIncludeAttachments: boolean; adminRoleIds: string[]; staffRoleIds: string[]; buttons: TicketButton[]; tickets: TicketRecord[] };
 
@@ -37,7 +37,7 @@ function isAdmin(i: Interaction, cfg: GuildConfig): boolean {
   return (perms & 0x8n) !== 0n || (perms & 0x20n) !== 0n || (i.member?.roles ?? []).some((r) => cfg.adminRoleIds.includes(r));
 }
 const isStaff = (i: Interaction, cfg: GuildConfig) => isAdmin(i, cfg) || (i.member?.roles ?? []).some((r) => cfg.staffRoleIds.includes(r));
-const embed = (title: string, description: string, color = 5793266) => ({ title, description, color, footer: { text: "Relay • ZeroTech" } });
+const embed = (title: string, description: string, color = 5793266) => ({ title, description, color, footer: { text: "<:zerotech_logo:1560034505052528731> • <:nispax_old:1435320966673600602>" } });
 function panelPayload(cfg: GuildConfig) {
   const active = (cfg.buttons ?? []).filter((b) => b.enabled).slice(0, 125);
   const embeds = [embed("🎫 Support Tickets", "Need help? Choose the option that best matches your issue and our team will assist you.\\n\\nYour ticket will be private to you and the support team.")];
@@ -128,7 +128,7 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
     method: "POST",
     body: JSON.stringify({ name: channelName.slice(0, 100), type: 0, ...(cfg.categoryId ? { parent_id: cfg.categoryId } : {}), topic: `Relay ticket • owner:${uid}`, permission_overwrites: overwrites }),
   });
-  const ticket: TicketRecord = { channelId: created.id, ownerId: uid, claimedBy: null, status: "open", createdAt: new Date().toISOString() };
+  const ticket: TicketRecord = { channelId: created.id, ownerId: uid, claimedBy: null, status: "open", createdAt: new Date().toISOString(), originalChannelName: created.name };
   cfg.tickets.push(ticket);
   try {
     await writeJson(configPath(guildId), cfg);
@@ -396,7 +396,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         return response(`Removed ${selected.length} member(s) from the ticket.`);
       }
       if (action === "addmember") {
-        if (ticket.ownerId !== uid && !isStaff(i, cfg)) return response("Only the ticket creator or authorized staff can add members.");
+        if (!isStaff(i, cfg)) return response("Only configured support staff can add members to this ticket.");
         const selected = data.values ?? [];
         if (!selected.length) return response("Select at least one member.");
         const current = await discordRequest<{ permission_overwrites?: Array<{ id: string; type: number; allow?: string; deny?: string }> }>(`/channels/${channelId}`);
@@ -410,17 +410,33 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       if (action === "claim") {
         if (!isStaff(i, cfg)) return response("Only configured support staff can claim tickets.");
         if (ticket.claimedBy && ticket.claimedBy !== uid) return response(`This ticket is already claimed by <@${ticket.claimedBy}>.`);
+        if (ticket.claimedBy === uid) return response("You have already claimed this ticket.");
         ticket.claimedBy = uid;
         await writeJson(configPath(guildId), cfg);
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket claimed by <@${uid}>.`, allowed_mentions: { parse: [], users: [uid] } }) });
+        const claimedLabel = button(`ticket:claim:${channelId}`, "Claimed", 2);
+        (claimedLabel as { disabled?: boolean }).disabled = true;
+        if (i.message?.id && i.channel_id) {
+          const currentContent = i.message.content ?? "";
+          const suffix = `\\n\\nClaimed by ${username(i)}`;
+          await discordRequest(`/channels/${i.channel_id}/messages/${i.message.id}`, { method: "PATCH", body: JSON.stringify({ content: currentContent.includes("Claimed by ") ? currentContent.replace(/\\n\\nClaimed by .*/, suffix) : currentContent + suffix, components: [row(claimedLabel, button(`ticket:close:${channelId}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"), userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket")] }) });
+        }
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Claimed by ${username(i)} (<@${uid}>).`, allowed_mentions: { parse: [], users: [uid] } }) });
         await log(cfg, "Ticket Claimed", `Ticket <#${channelId}> claimed by <@${uid}>.`);
         return response("Ticket claimed.");
+      }
+      if (action === "delete") {
+        if (!isStaff(i, cfg)) return response("Only configured support staff can delete ticket channels.");
+        await log(cfg, "Ticket Channel Deleted", `Ticket channel #${ticket.originalChannelName ?? channelId} deleted by <@${uid}>.`);
+        cfg.tickets = cfg.tickets.filter((t) => t.channelId !== channelId);
+        await writeJson(configPath(guildId), cfg);
+        await discordRequest(`/channels/${channelId}`, { method: "DELETE" });
+        return response("Ticket channel deleted.");
       }
       if (action === "reopen") {
         if (ticket.ownerId !== uid && !isStaff(i, cfg)) return response("Only the ticket creator or authorized staff can reopen this ticket.");
         ticket.status = "open";
         const reopenOverwrites = [{ id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, allow: "3072" }, ...[...new Set([...cfg.staffRoleIds, ...cfg.adminRoleIds])].map((id) => ({ id, type: 0, allow: "3072" }))];
-        await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: reopenOverwrites }) });
+        await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: ticket.originalChannelName ?? `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: reopenOverwrites }) });
         await writeJson(configPath(guildId), cfg);
         await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket reopened by <@${uid}>.`, components: [row(button(`ticket:claim:${channelId}`, "Claim", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"), userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket")], allowed_mentions: { parse: [], users: [uid] } }) });
         await log(cfg, "Ticket Reopened", `Ticket <#${channelId}> reopened by <@${uid}>.`);
@@ -431,8 +447,8 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         await deliverTranscript(cfg, channelId, ticket.ownerId).catch((err) => console.error("[relay transcript]", err));
         ticket.status = "closed";
         await writeJson(configPath(guildId), cfg);
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket closed by <@${uid}>.`, components: [row(button(`ticket:reopen:${channelId}`, "Reopen Ticket", 3))], allowed_mentions: { parse: [], users: [uid] } }) });
-        await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: `closed-${channelId.slice(-6)}`, permission_overwrites: [
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content: `Ticket closed by <@${uid}>.`, components: [row(button(`ticket:reopen:${channelId}`, "Reopen Ticket", 3), button(`ticket:delete:${channelId}`, "Delete Channel", 4))], allowed_mentions: { parse: [], users: [uid] } }) });
+        await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: ticket.originalChannelName ?? `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: [
           { id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, deny: "2048" },
           ...cfg.staffRoleIds.map((id) => ({ id, type: 0, allow: "3072" })),
           ...cfg.adminRoleIds.map((id) => ({ id, type: 0, allow: "3072" })),
