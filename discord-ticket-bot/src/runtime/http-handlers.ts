@@ -39,11 +39,11 @@ function isAdmin(i: Interaction, cfg: GuildConfig): boolean {
 }
 const isStaff = (i: Interaction, cfg: GuildConfig) => isAdmin(i, cfg) || (i.member?.roles ?? []).some((r) => cfg.staffRoleIds.includes(r));
 const embed = (title: string, description: string, color = 5793266) => ({ title, description, color, footer: { text: "" } });
-const BRAND_FOOTER = "<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>";
+const BRAND_FOOTER = "Built by ZeroTech × NISPAX InfoTech";
 
 const v2Text = (content: string, rows: unknown[] = [], accent_color = 5793266) => {
   const hasFooter = content.includes(BRAND_FOOTER);
-  const body = content.replace(/\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>$/, "");
+  const body = content.replace(/\n\n(?:Built by ZeroTech × NISPAX InfoTech|Built by ZeroTech × NISPAX InfoTech)$/, "");
   return {
     flags: 32768,
     components: [{
@@ -63,7 +63,7 @@ const v2Row = (...components: unknown[]) => ({ type: 1, components });
 function panelPayload(cfg: GuildConfig) {
   const active = (cfg.buttons ?? []).filter((b) => b.enabled).slice(0, 125);
   const components: Array<Record<string, unknown>> = [
-    { type: 10, content: "## 🎫 Support Tickets\nNeed help? Choose the option that best matches your issue and our team will assist you.\n\n🔒 Your ticket will be private to you and the support team.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>" },
+    { type: 10, content: "## 🎫 Support Tickets\nNeed help? Choose the option that best matches your issue and our team will assist you.\n\n🔒 Your ticket will be private to you and the support team.\n\nBuilt by ZeroTech × NISPAX InfoTech" },
   ];
   if (active.length === 0) active.push({ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true });
   if (active.length <= 25) {
@@ -161,7 +161,7 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
     const ticketPanel = await discordRequest<{ id: string }>(`/channels/${created.id}/messages`, {
       method: "POST",
       body: JSON.stringify({
-        ...v2Text(`## 🎫 ${ticketButton.label}\n<@${uid}> ${ticketButton.openingMessage || "Thanks for contacting support! Please describe your issue below."}\n\n> 🔒 Private support channel\n> Staff can claim this ticket or close it when resolved.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
+        ...v2Text(`## 🎫 ${ticketButton.label}\n<@${uid}> ${ticketButton.openingMessage || "Thanks for contacting support! Please describe your issue below."}\n\n> 🔒 Private support channel\n> Staff can claim this ticket or close it when resolved.\n\nBuilt by ZeroTech × NISPAX InfoTech`, [
           v2Row(button(`ticket:claim:${created.id}`, "Claim Ticket", 3), button(`ticket:close:${created.id}`, "Close Ticket", 4)),
           userSelect(`ticket:addmember:${created.id}`, "Add members to this ticket"),
           userSelect(`ticket:removemember:${created.id}`, "Remove members from this ticket"),
@@ -477,7 +477,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         await writeJson(configPath(guildId), cfg);
         if (i.message?.id && i.channel_id) {
           await discordRequest(`/channels/${i.channel_id}/messages/${i.message.id}`, { method: "PATCH", body: JSON.stringify({
-            ...v2Text(`## 🎫 Ticket Controls\nThis ticket is currently unclaimed. A staff member can claim it when ready.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
+            ...v2Text(`## 🎫 Ticket Controls\nThis ticket is currently unclaimed. A staff member can claim it when ready.\n\nBuilt by ZeroTech × NISPAX InfoTech`, [
               v2Row(button(`ticket:claim:${channelId}`, "Claim Ticket", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4)),
               userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"),
               userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket"),
@@ -499,7 +499,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
           const currentContent = i.message.content ?? "";
           const suffix = `\n\nClaimed by ${username(i)}`;
           await discordRequest(`/channels/${i.channel_id}/messages/${i.message.id}`, { method: "PATCH", body: JSON.stringify({
-            ...v2Text(`## 🎫 Ticket Controls\n${currentContent.replace(/\n\nClaimed by .*/, "").replace(/^.*?Thanks for contacting support!/, "Thanks for contacting support!")}\n\n> 🟢 Claimed by <@${uid}>\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
+            ...v2Text(`## 🎫 Ticket Controls\n${currentContent.replace(/\n\nClaimed by .*/, "").replace(/^.*?Thanks for contacting support!/, "Thanks for contacting support!")}\n\n> 🟢 Claimed by <@${uid}>\n\nBuilt by ZeroTech × NISPAX InfoTech`, [
               v2Row(claimedLabel, button(`ticket:close:${channelId}`, "Close Ticket", 4)),
               userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"),
               userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket"),
@@ -525,7 +525,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         const reopenOverwrites = [{ id: guildId, type: 0, deny: "1024" }, { id: ticket.ownerId, type: 1, allow: "3072" }, ...[...new Set([...cfg.staffRoleIds, ...cfg.adminRoleIds])].map((id) => ({ id, type: 0, allow: "3072" }))];
         await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: ticket.originalChannelName ?? `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: reopenOverwrites }) });
         await writeJson(configPath(guildId), cfg);
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`## 🔓 Ticket Reopened\nReopened by <@${uid}>. The conversation can continue below.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`## 🔓 Ticket Reopened\nReopened by <@${uid}>. The conversation can continue below.\n\nBuilt by ZeroTech × NISPAX InfoTech`, [
           v2Row(button(`ticket:claim:${channelId}`, "Claim Ticket", 3), button(`ticket:close:${channelId}`, "Close Ticket", 4)),
           userSelect(`ticket:addmember:${channelId}`, "Add members to this ticket"),
           userSelect(`ticket:removemember:${channelId}`, "Remove members from this ticket"),
@@ -538,7 +538,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         await deliverTranscript(cfg, channelId, ticket.ownerId).catch((err) => console.error("[relay transcript]", err));
         ticket.status = "closed";
         await writeJson(configPath(guildId), cfg);
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`## 🔒 Ticket Closed\nClosed by <@${uid}>. This ticket is now read-only for the ticket creator.\n\nYou can reopen it if more help is needed, or delete the channel when finished.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>`, [
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`## 🔒 Ticket Closed\nClosed by <@${uid}>. This ticket is now read-only for the ticket creator.\n\nYou can reopen it if more help is needed, or delete the channel when finished.\n\nBuilt by ZeroTech × NISPAX InfoTech`, [
           v2Row(button(`ticket:reopen:${channelId}`, "Reopen Ticket", 3), button(`ticket:delete:${channelId}`, "Delete Channel", 4)),
         ], 15548997), allowed_mentions: { parse: [], users: [uid] } }) });
         await discordRequest(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify({ name: ticket.originalChannelName ?? `ticket-${ticket.ownerId.slice(-6)}`, permission_overwrites: [
