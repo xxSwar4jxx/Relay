@@ -41,7 +41,7 @@ const isStaff = (i: Interaction, cfg: GuildConfig) => isAdmin(i, cfg) || (i.memb
 const embed = (title: string, description: string, color = 5793266) => ({ title, description, color, footer: { text: "" } });
 function panelPayload(cfg: GuildConfig) {
   const active = (cfg.buttons ?? []).filter((b) => b.enabled).slice(0, 125);
-  const embeds = [embed("🎫 Support Tickets", "Need help? Choose the option that best matches your issue and our team will assist you.\n\nYour ticket will be private to you and the support team.\n\n<:zerotech_logo:1560034505052528731> • <:nispax_old:1435320966673600602>")];
+  const embeds = [embed("🎫 Support Tickets", "Need help? Choose the option that best matches your issue and our team will assist you.\n\nYour ticket will be private to you and the support team.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>")];
   const components: Array<Record<string, unknown>> = [];
   if (active.length === 0) active.push({ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true });
   if (active.length <= 25) {
@@ -137,7 +137,7 @@ async function openTicket(i: Interaction, cfg: GuildConfig, buttonId = "general"
       method: "POST",
       body: JSON.stringify({
         content: `<@${uid}> ${ticketButton.openingMessage || "Thanks for contacting support! Please describe your issue below."}\n\nStaff can claim this ticket or close it when resolved.`,
-        embeds: [embed("Ticket Controls", "Use the controls below. Claiming is limited to configured staff.\n\n<:zerotech_logo:1560034505052528731> • <:nispax_old:1435320966673600602>")],
+        embeds: [embed("Ticket Controls", "Use the controls below. Claiming is limited to configured staff.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>")],
         components: [row(button(`ticket:claim:${created.id}`, "Claim", 3), button(`ticket:close:${created.id}`, "Close Ticket", 4)), userSelect(`ticket:addmember:${created.id}`, "Add members to this ticket"), userSelect(`ticket:removemember:${created.id}`, "Remove members from this ticket")],
         allowed_mentions: { parse: [], users: [uid] },
       }),
