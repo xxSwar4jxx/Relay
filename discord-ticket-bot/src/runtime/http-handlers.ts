@@ -39,18 +39,25 @@ function isAdmin(i: Interaction, cfg: GuildConfig): boolean {
 }
 const isStaff = (i: Interaction, cfg: GuildConfig) => isAdmin(i, cfg) || (i.member?.roles ?? []).some((r) => cfg.staffRoleIds.includes(r));
 const embed = (title: string, description: string, color = 5793266) => ({ title, description, color, footer: { text: "" } });
-const v2Text = (content: string, rows: unknown[] = [], accent_color = 5793266) => ({
-  flags: 32768,
-  components: [{
-    type: 17,
-    accent_color,
-    components: [
-      { type: 10, content },
-      ...rows,
-    ],
-  }],
-  allowed_mentions: { parse: [] },
-});
+const BRAND_FOOTER = "<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>";
+
+const v2Text = (content: string, rows: unknown[] = [], accent_color = 5793266) => {
+  const hasFooter = content.includes(BRAND_FOOTER);
+  const body = content.replace(/\\n\\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>$/, "");
+  return {
+    flags: 32768,
+    components: [{
+      type: 17,
+      accent_color,
+      components: [
+        { type: 10, content: body },
+        ...rows,
+        ...(hasFooter ? [{ type: 10, content: BRAND_FOOTER }] : []),
+      ],
+    }],
+    allowed_mentions: { parse: [] },
+  };
+};
 const v2Row = (...components: unknown[]) => ({ type: 1, components });
 
 function panelPayload(cfg: GuildConfig) {
@@ -480,7 +487,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
             allowed_mentions: { parse: [], users: [uid] },
           }) });
         }
-        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`### 🟢 Ticket Claimed\n<@${uid}> (${username(i)}) is handling this ticket.`, [], 5763719), allowed_mentions: { parse: [], users: [uid] } }) });
+        await discordRequest(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ ...v2Text(`### Ticket Claimed\n<@${uid}> (${username(i)}) is handling this ticket.`, [], 5763719), allowed_mentions: { parse: [], users: [uid] } }) });
         await log(cfg, "Ticket Claimed", `Ticket <#${channelId}> claimed by <@${uid}>.`);
         return response("Ticket claimed.");
       }
