@@ -63,7 +63,7 @@ const v2Row = (...components: unknown[]) => ({ type: 1, components });
 function panelPayload(cfg: GuildConfig) {
   const active = (cfg.buttons ?? []).filter((b) => b.enabled).slice(0, 125);
   const components: Array<Record<string, unknown>> = [
-    { type: 10, content: "## 🎫 Support Tickets\nNeed help? Choose the option that best matches your issue and our team will assist you.\n\n🔒 Your ticket will be private to you and the support team.\n\nDeveloped by ZeroTech × NISPAX InfoTech" },
+    { type: 10, content: "## 🎫 Support Tickets\nNeed help? Choose the option that best matches your issue and our team will assist you.\n\n🔒 Your ticket will be private to you and the support team." },
   ];
   if (active.length === 0) active.push({ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true });
   if (active.length <= 25) {
@@ -75,6 +75,8 @@ function panelPayload(cfg: GuildConfig) {
       components.push(row({ type: 3, custom_id: `ticket:select:${Math.floor(offset / 25)}`, placeholder: `Choose a ticket type (${offset + 1}-${offset + group.length})`, min_values: 1, max_values: 1, options: group.map((b) => ({ label: b.label.slice(0, 100), value: b.id, ...(b.emoji ? { emoji: { name: b.emoji } } : {}) })) }));
     }
   }
+  // Keep attribution as the final component, after every ticket button/select row.
+  components.push({ type: 10, content: BRAND_FOOTER });
   return { flags: 32768, components: [{ type: 17, accent_color: 5793266, components }], allowed_mentions: { parse: [] } };
 }
 async function log(cfg: GuildConfig, title: string, description: string) {
