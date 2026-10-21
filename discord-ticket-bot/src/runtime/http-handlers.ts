@@ -41,8 +41,9 @@ const isStaff = (i: Interaction, cfg: GuildConfig) => isAdmin(i, cfg) || (i.memb
 const embed = (title: string, description: string, color = 5793266) => ({ title, description, color, footer: { text: "" } });
 function panelPayload(cfg: GuildConfig) {
   const active = (cfg.buttons ?? []).filter((b) => b.enabled).slice(0, 125);
-  const embeds = [embed("🎫 Support Tickets", "Need help? Choose the option that best matches your issue and our team will assist you.\n\nYour ticket will be private to you and the support team.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>")];
-  const components: Array<Record<string, unknown>> = [];
+  const components: Array<Record<string, unknown>> = [
+    { type: 10, content: "## 🎫 Support Tickets\nNeed help? Choose the option that best matches your issue and our team will assist you.\n\n🔒 Your ticket will be private to you and the support team.\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>" },
+  ];
   if (active.length === 0) active.push({ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true });
   if (active.length <= 25) {
     const controls = active.map((b) => button(`ticket:open:${b.id}`, `${b.emoji ? `${b.emoji} ` : ""}${b.label}`.slice(0, 80), b.style));
@@ -53,7 +54,7 @@ function panelPayload(cfg: GuildConfig) {
       components.push(row({ type: 3, custom_id: `ticket:select:${Math.floor(offset / 25)}`, placeholder: `Choose a ticket type (${offset + 1}-${offset + group.length})`, min_values: 1, max_values: 1, options: group.map((b) => ({ label: b.label.slice(0, 100), value: b.id, ...(b.emoji ? { emoji: { name: b.emoji } } : {}) })) }));
     }
   }
-  return { embeds, components, allowed_mentions: { parse: [] } };
+  return { flags: 32768, components: [{ type: 17, accent_color: 5793266, components }], allowed_mentions: { parse: [] } };
 }
 async function log(cfg: GuildConfig, title: string, description: string) {
   if (!cfg.logChannelId) return;
@@ -171,7 +172,7 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
     if (sub === "config") return response(`**Relay Configuration**\n• Ticket category: ${cfg.categoryId ? `<#${cfg.categoryId}>` : "not configured"}\n• Panel channel: ${cfg.panelChannelId ? `<#${cfg.panelChannelId}>` : "not configured"}\n• Logging channel: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : "not configured"}\n• Transcript channel: ${cfg.transcriptChannelId ? `<#${cfg.transcriptChannelId}>` : "not configured"}\n• Transcripts enabled: ${cfg.transcriptsEnabled ? "yes" : "no"}\n• Admin roles: ${cfg.adminRoleIds.length}\n• Staff roles: ${cfg.staffRoleIds.length}\n• Open tickets tracked: ${cfg.tickets.filter((t) => t.status === "open").length}`);
     if (sub === "panel") {
       const action = options.find((o) => o.name === "action")?.value;
-      if (action === "preview") return { type: 4, data: { ...panelPayload(cfg), flags: 64 } };
+      if (action === "preview") return { type: 4, data: { ...panelPayload(cfg), flags: 32768 | 64 } };
       const channelOpt = options.find((o) => o.name === "channel")?.value;
       const channelId = typeof channelOpt === "string" ? channelOpt : cfg.panelChannelId ?? i.channel_id;
       if (!channelId) return response("Choose a panel channel with `/ticket setup` first.");
@@ -184,7 +185,16 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
       }
       cfg.panelChannelId = channelId; cfg.panelMessageId = messageId ?? null;
       await writeJson(configPath(guildId), cfg);
-      return response(`Ticket panel published in <#${channelId}>.`);
+      let pinNotice = "";
+      if (messageId) {
+        try {
+          await discordRequest(`/channels/${channelId}/pins/${messageId}`, { method: "PUT" });
+        } catch (error) {
+          pinNotice = " The panel was published, but I couldn't pin it; check that Relay has Manage Messages permission in that channel.";
+          console.error("[relay panel pin]", { guildId, channelId, messageId, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+      return response(`Ticket panel published in <#${channelId}>.${pinNotice}`);
     }
     if (sub === "reset") {
       cfg.categoryId = null; cfg.panelChannelId = null; cfg.panelMessageId = null; cfg.logChannelId = null; cfg.transcriptChannelId = null; cfg.transcriptsEnabled = false; cfg.transcriptIncludeAttachments = true; cfg.adminRoleIds = []; cfg.staffRoleIds = []; cfg.buttons = [{ id: "general", label: "Open a Ticket", emoji: "🎫", style: 1, channelName: "ticket-{username}", openingMessage: "Thanks for contacting support! Please describe your issue below.", staffRoleIds: [], enabled: true }];
@@ -299,7 +309,16 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         }
         cfg.panelMessageId = messageId ?? null;
         await writeJson(configPath(guildId), cfg);
-        return updateResponse(`Panel published in <#${cfg.panelChannelId}>.`);
+        let pinNotice = "";
+        if (messageId) {
+          try {
+            await discordRequest(`/channels/${cfg.panelChannelId}/pins/${messageId}`, { method: "PUT" });
+          } catch (error) {
+            pinNotice = " The panel was published, but I couldn't pin it; check that Relay has Manage Messages permission in that channel.";
+            console.error("[relay panel pin]", { guildId, channelId: cfg.panelChannelId, messageId, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
+        return updateResponse(`Panel published in <#${cfg.panelChannelId}>.${pinNotice}`);
       }
     }
     if (customId === "ticket:open" || customId.startsWith("ticket:open:")) return await openTicket(i, cfg, customId.split(":")[2] || "general");
@@ -374,6 +393,13 @@ export async function handleHttpInteraction(i: Interaction): Promise<unknown> {
         if (mid) { try { await discordRequest(`/channels/${cfg.panelChannelId}/messages/${mid}`, { method: "PATCH", body: JSON.stringify(payload) }); } catch { const sent = await discordRequest<{id:string}>(`/channels/${cfg.panelChannelId}/messages`, { method: "POST", body: JSON.stringify(payload) }); mid = sent.id; } }
         else { const sent = await discordRequest<{id:string}>(`/channels/${cfg.panelChannelId}/messages`, { method: "POST", body: JSON.stringify(payload) }); mid = sent.id; }
         cfg.panelMessageId = mid ?? null;
+        if (mid) {
+          try {
+            await discordRequest(`/channels/${cfg.panelChannelId}/pins/${mid}`, { method: "PUT" });
+          } catch (error) {
+            console.error("[relay panel pin]", { guildId, channelId: cfg.panelChannelId, messageId: mid, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
       }
       await writeJson(configPath(guildId), cfg);
       return updateResponse(`Ticket buttons updated.\n${cfg.buttons.map((b,n)=>`${n+1}. ${b.enabled ? "🟢" : "⚪"} ${b.label}`).join("\n")}`, [row(button("buttons:add:general", "Add General", 1), button("buttons:add:billing", "Add Billing"), button("buttons:add:technical", "Add Technical")), ...cfg.buttons.slice(0,4).map((b)=>row(button(`buttons:toggle:${b.id}`, `${b.enabled ? "Disable" : "Enable"}: ${b.label}`.slice(0,80), b.enabled ? 4 : 3), button(`buttons:delete:${b.id}`, "Delete", 4))), row(button("buttons:publish", "Publish / Update Panel", 1))]);
