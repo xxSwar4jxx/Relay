@@ -43,7 +43,7 @@ const BRAND_FOOTER = "<:zerotech_logo:1560034505052528731> • <:nispax:15623228
 
 const v2Text = (content: string, rows: unknown[] = [], accent_color = 5793266) => {
   const hasFooter = content.includes(BRAND_FOOTER);
-  const body = content.replace(/\\n\\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>$/, "");
+  const body = content.replace(/\n\n<:zerotech_logo:1560034505052528731> • <:nispax:1562322844895936532>$/, "");
   return {
     flags: 32768,
     components: [{
