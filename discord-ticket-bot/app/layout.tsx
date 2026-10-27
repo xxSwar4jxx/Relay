@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "Relay",
-  description: "Relay Discord ticket system",
+  title: "Windy",
+  description: "Windy Discord ticket system",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
